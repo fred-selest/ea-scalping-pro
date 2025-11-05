@@ -106,7 +106,7 @@ string dashboard_text = "";
 datetime last_dashboard_update = 0;
 
 // Auto-Update
-#define CURRENT_VERSION "27.2"
+#define CURRENT_VERSION "27.2-FIXED"
 datetime last_update_check = 0;
 bool update_available = false;
 string latest_version = "";
@@ -661,210 +661,112 @@ double CalculateLotSize(string symbol)
 //+------------------------------------------------------------------+
 //| Créer le dashboard                                               |
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Créer le dashboard SIMPLIFIÉ                                    |
+//+------------------------------------------------------------------+
 void CreateDashboard()
 {
-   // Fond du dashboard avec bordure
+   // Supprimer anciens objets
+   for(int i=0; i<20; i++) {
+      ObjectDelete(0, "Dash_"+IntegerToString(i));
+   }
+   ObjectDelete(0, "Dashboard_BG");
+   ObjectDelete(0, "Dashboard_Title");
+   
+   // Fond
    ObjectCreate(0, "Dashboard_BG", OBJ_RECTANGLE_LABEL, 0, 0, 0);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_XDISTANCE, Dashboard_X);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_YDISTANCE, Dashboard_Y);
-   ObjectSetInteger(0, "Dashboard_BG", OBJPROP_XSIZE, 400);
-   ObjectSetInteger(0, "Dashboard_BG", OBJPROP_YSIZE, 500);
+   ObjectSetInteger(0, "Dashboard_BG", OBJPROP_XSIZE, 360);
+   ObjectSetInteger(0, "Dashboard_BG", OBJPROP_YSIZE, 300);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_BGCOLOR, clrBlack);
-   ObjectSetInteger(0, "Dashboard_BG", OBJPROP_BORDER_TYPE, BORDER_RAISED);
+   ObjectSetInteger(0, "Dashboard_BG", OBJPROP_BORDER_TYPE, BORDER_FLAT);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_CORNER, CORNER_LEFT_UPPER);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_COLOR, clrDodgerBlue);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_WIDTH, 2);
-   ObjectSetInteger(0, "Dashboard_BG", OBJPROP_BACK, false);
-   ObjectSetInteger(0, "Dashboard_BG", OBJPROP_SELECTABLE, false);
-   ObjectSetInteger(0, "Dashboard_BG", OBJPROP_HIDDEN, true);
+   ObjectSetInteger(0, "Dashboard_BG", OBJPROP_BACK, true);
    
-   // Titre du dashboard
+   // Titre
    ObjectCreate(0, "Dashboard_Title", OBJ_LABEL, 0, 0, 0);
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_XDISTANCE, Dashboard_X + 20);
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_YDISTANCE, Dashboard_Y + 10);
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_COLOR, clrYellow);
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_FONTSIZE, 11);
    ObjectSetString(0, "Dashboard_Title", OBJPROP_FONT, "Arial Black");
-   ObjectSetString(0, "Dashboard_Title", OBJPROP_TEXT, "EA SCALPING MULTI-PAIRES v27");
+   ObjectSetString(0, "Dashboard_Title", OBJPROP_TEXT, "EA SCALPING v27.2-SIMPLE");
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-   ObjectSetInteger(0, "Dashboard_Title", OBJPROP_SELECTABLE, false);
-   ObjectSetInteger(0, "Dashboard_Title", OBJPROP_HIDDEN, true);
    
-   // Texte principal
-   ObjectCreate(0, "Dashboard_Text", OBJ_LABEL, 0, 0, 0);
-   ObjectSetInteger(0, "Dashboard_Text", OBJPROP_XDISTANCE, Dashboard_X + 15);
-   ObjectSetInteger(0, "Dashboard_Text", OBJPROP_YDISTANCE, Dashboard_Y + 40);
-   ObjectSetInteger(0, "Dashboard_Text", OBJPROP_COLOR, clrWhite);
-   ObjectSetInteger(0, "Dashboard_Text", OBJPROP_FONTSIZE, 9);
-   ObjectSetString(0, "Dashboard_Text", OBJPROP_FONT, "Courier New");
-   ObjectSetInteger(0, "Dashboard_Text", OBJPROP_CORNER, CORNER_LEFT_UPPER);
-   ObjectSetInteger(0, "Dashboard_Text", OBJPROP_SELECTABLE, false);
-   ObjectSetInteger(0, "Dashboard_Text", OBJPROP_HIDDEN, true);
+   // Créer 14 lignes de texte
+   int yPos = Dashboard_Y + 40;
+   int lineHeight = 18;
+   
+   for(int i=0; i<14; i++) {
+      string objName = "Dash_"+IntegerToString(i);
+      ObjectCreate(0, objName, OBJ_LABEL, 0, 0, 0);
+      ObjectSetInteger(0, objName, OBJPROP_XDISTANCE, Dashboard_X + 15);
+      ObjectSetInteger(0, objName, OBJPROP_YDISTANCE, yPos + (i * lineHeight));
+      ObjectSetInteger(0, objName, OBJPROP_COLOR, clrWhite);
+      ObjectSetInteger(0, objName, OBJPROP_FONTSIZE, 9);
+      ObjectSetString(0, objName, OBJPROP_FONT, "Courier New");
+      ObjectSetInteger(0, objName, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetString(0, objName, OBJPROP_TEXT, "Chargement...");
+   }
+   
+   ChartRedraw(0);
+   Print("✅ Dashboard simplifié créé (14 lignes)");
 }
 
 //+------------------------------------------------------------------+
-//| Mettre à jour le dashboard                                       |
+//| Mettre à jour le dashboard SIMPLIFIÉ                            |
 //+------------------------------------------------------------------+
 void UpdateDashboard()
 {
    if(!ShowDashboard) return;
-   if(TimeCurrent() - last_dashboard_update < 1) return;
+   if(TimeCurrent() - last_dashboard_update < 2) return;
    
    last_dashboard_update = TimeCurrent();
    
-   string text = "";
-   
-   // === SECTION COMPTE ===
+   // Données
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
    double equity_pct = (equity / balance - 1) * 100;
-   string equity_color = equity_pct >= 0 ? "▲" : "▼";
-   
-   text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-   text += "  COMPTE\n";
-   text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-   text += StringFormat("Balance : %.2f %s\n", balance, AccountInfoString(ACCOUNT_CURRENCY));
-   text += StringFormat("Equity  : %.2f %s %s %.1f%%\n\n", 
-                        equity, 
-                        AccountInfoString(ACCOUNT_CURRENCY),
-                        equity_color,
-                        MathAbs(equity_pct));
-   
-   // === SECTION STATISTIQUES ===
-   text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-   text += "  STATISTIQUES DU JOUR\n";
-   text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-   text += StringFormat("Trades  : %d / %d max\n", trades_today, MaxTradesPerDay);
-   
-   string profit_emoji = daily_profit >= 0 ? "▲" : "▼";
-   text += StringFormat("P&L     : %s %.2f %s\n\n",
-                        profit_emoji,
-                        MathAbs(daily_profit),
-                        AccountInfoString(ACCOUNT_CURRENCY));
-   
-   // === SECTION POSITIONS ===
-   text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-   text += "  POSITIONS OUVERTES\n";
-   text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+   string currency = AccountInfoString(ACCOUNT_CURRENCY);
    
    int total_pos = 0;
    double total_profit = 0;
-   bool has_positions = false;
    
-   for(int i = 0; i < symbol_count; i++) {
-      string sym = symbols[i];
-      int sym_pos = 0;
-      double sym_profit = 0;
-      
-      for(int j = PositionsTotal() - 1; j >= 0; j--) {
-         ulong ticket = PositionGetTicket(j);
-         if(!PositionSelectByTicket(ticket)) continue;
-         if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
-         if(PositionGetString(POSITION_SYMBOL) != sym) continue;
-         
-         sym_pos++;
-         double pos_profit = PositionGetDouble(POSITION_PROFIT);
-         sym_profit += pos_profit;
-         total_pos++;
-         total_profit += pos_profit;
-      }
-      
-      if(sym_pos > 0) {
-         has_positions = true;
-         string emoji = sym_profit >= 0 ? "▲" : "▼";
-         string color_mark = sym_profit >= 0 ? "+" : "";
-         text += StringFormat("%s %-8s: %d pos | %s%.2f\n",
-                             emoji, sym, sym_pos, color_mark, sym_profit);
-      }
+   for(int j = PositionsTotal() - 1; j >= 0; j--) {
+      ulong ticket = PositionGetTicket(j);
+      if(!PositionSelectByTicket(ticket)) continue;
+      if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+      total_pos++;
+      total_profit += PositionGetDouble(POSITION_PROFIT);
    }
    
-   if(!has_positions) {
-      text += "Aucune position active\n";
-   } else {
-      text += "──────────────────────────\n";
-      string total_emoji = total_profit >= 0 ? "▲" : "▼";
-      string total_color = total_profit >= 0 ? "+" : "";
-      text += StringFormat("%s TOTAL  : %d pos | %s%.2f\n",
-                          total_emoji, total_pos, total_color, total_profit);
-   }
-   text += "\n";
-   
-   // === SECTION NEWS ===
-   text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-   text += "  PROCHAINES NEWS\n";
-   text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-   
-   if(UseNewsFilter && ArraySize(news_events) > 0) {
-      int news_count = 0;
-      datetime now = TimeCurrent();
-      
-      for(int i = 0; i < ArraySize(news_events) && news_count < 4; i++) {
-         int time_diff = (int)(news_events[i].time - now);
-         if(time_diff > 0 && time_diff < 14400) { // Prochaines 4h
-            string impact_emoji = "○";
-            if(news_events[i].impact == "High") impact_emoji = "●";
-            else if(news_events[i].impact == "Medium") impact_emoji = "◐";
-            
-            int hours = time_diff / 3600;
-            int mins = (time_diff % 3600) / 60;
-            string time_str = "";
-            if(hours > 0) time_str = StringFormat("%dh%02d", hours, mins);
-            else time_str = StringFormat("%dm", mins);
-            
-            // Tronquer titre si trop long
-            string title = news_events[i].title;
-            if(StringLen(title) > 20) {
-               title = StringSubstr(title, 0, 20) + "...";
-            }
-            
-            text += StringFormat("%s %s %s\n   %s\n",
-                                impact_emoji,
-                                news_events[i].country,
-                                time_str,
-                                title);
-            news_count++;
-         }
-      }
-      
-      if(news_count == 0) {
-         text += "Aucune news dans les 4h\n";
-      }
-   } else {
-      text += UseNewsFilter ? "Chargement..." : "Filtre désactivé\n";
-   }
-   text += "\n";
-   
-   // === SECTION STATUT ===
-   text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-   text += "  STATUT EA\n";
-   text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-   
-   // Sessions actives
-   string sessions = "";
-   if(Trade_London) sessions += "LON ";
-   if(Trade_NewYork) sessions += "NY ";
-   if(Trade_Asian) sessions += "ASIA";
-   if(sessions == "") sessions = "Aucune";
-   text += StringFormat("Sessions : %s\n", sessions);
-   
-   // Filtres
-   text += StringFormat("News     : %s\n", UseNewsFilter ? "ON" : "OFF");
-   text += StringFormat("ONNX     : %s\n", UseONNX ? "ON" : "OFF");
-   
-   // Limites
-   text += StringFormat("Positions: %d / %d max\n", total_pos, MaxOpenPositions);
-   
-   // Spread moyen
+   string profit_sign = total_profit >= 0 ? "+" : "";
+   string equity_sign = equity_pct >= 0 ? "+" : "";
    long spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD);
-   text += StringFormat("Spread   : %d pts\n", spread);
    
-   text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+   // Lignes du dashboard
+   int line = 0;
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, "===========================");
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, "COMPTE");
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("Balance: %.2f %s", balance, currency));
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("Equity : %.2f (%s%.1f%%)", equity, equity_sign, equity_pct));
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, "===========================");
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, "POSITIONS");
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("Total  : %d pos", total_pos));
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("P&L    : %s%.2f %s", profit_sign, total_profit, currency));
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, "===========================");
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, "STATISTIQUES");
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("Trades : %d/%d", trades_today, MaxTradesPerDay));
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("Spread : %d pts", spread));
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, "===========================");
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("News:%s Pos:%d/%d", UseNewsFilter?"ON":"OFF", total_pos, MaxOpenPositions));
    
-   ObjectSetString(0, "Dashboard_Text", OBJPROP_TEXT, text);
-   
-   // Forcer le rafraîchissement
    ChartRedraw(0);
 }
+
 
 //+------------------------------------------------------------------+
 //| Tick handler                                                      |
