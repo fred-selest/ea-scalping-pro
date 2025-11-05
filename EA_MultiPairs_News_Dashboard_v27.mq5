@@ -74,7 +74,7 @@ input double   ATR_Filter = 1.5;
 // === AUTO-UPDATE ===
 input group "=== AUTO-UPDATE ==="
 input bool     EnableAutoUpdate = false;    // Activer mises à jour auto
-input string   UpdateURL = "https://raw.githubusercontent.com/votre-repo/main/EA_MultiPairs_News_Dashboard_v27.mq5";  // URL du code source
+input string   UpdateURL = "https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_News_Dashboard_v27.mq5";  // URL du code source
 input int      CheckUpdateEveryHours = 24;  // Vérifier MAJ toutes les X heures
 
 input int      MagicNumber = 270000;
@@ -1001,7 +1001,7 @@ void CheckForUpdates()
    Print("🔄 Vérification des mises à jour...");
    
    // URL de vérification de version (fichier texte simple)
-   string version_url = "https://raw.githubusercontent.com/votre-repo/main/VERSION.txt";
+   string version_url = "https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/VERSION.txt";
    
    string cookie = NULL, referer = NULL;
    char data[], result[];
