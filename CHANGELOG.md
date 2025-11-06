@@ -2,6 +2,16 @@
 
 ## Version 27.2-IMPROVED (06 Nov 2025)
 
+### 🎨 Interface et Dashboard
+- ✅ **Décalage automatique du graphique**
+  - Nouveau paramètre: AutoShiftChart (activer/désactiver)
+  - Constante DASHBOARD_WIDTH (380 pixels)
+  - Constante CHART_SHIFT_PERCENT (15% par défaut)
+  - Fonction ShiftChartForDashboard() pour déplacer le graphique
+  - Dashboard reste visible en haut à gauche sans superposition
+  - Restauration automatique du décalage dans OnDeinit()
+  - Graphique décalé de 15% vers la droite pour laisser espace au dashboard
+
 ### 🚀 Améliorations majeures du code
 - ✅ **Constantes globales** pour valeurs magiques
   - PIPS_TO_POINTS_MULTIPLIER (conversion pips/points)
