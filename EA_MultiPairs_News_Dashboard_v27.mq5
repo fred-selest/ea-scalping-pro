@@ -1063,14 +1063,16 @@ void ShiftChartForDashboard()
       return;
    }
 
-   // Appliquer décalage de 15% pour faire de la place au dashboard
-   ChartSetInteger(0, CHART_SHIFT_SIZE, CHART_SHIFT_PERCENT);
-   ChartSetInteger(0, CHART_SHIFT, true);
+   // Activer le décalage du graphique pour faire de la place au dashboard
+   // Note: Le pourcentage de décalage est celui défini dans les propriétés du graphique MT5
+   // L'utilisateur doit s'assurer que le décalage est suffisant (au moins 15%)
+   ChartSetInteger(0, CHART_SHIFT, (long)1);
+   ChartSetInteger(0, CHART_AUTOSCROLL, (long)0);  // Désactiver auto-scroll
 
    // Forcer actualisation
    ChartRedraw(0);
 
-   Log(LOG_INFO, "✅ Graphique décalé de " + IntegerToString(CHART_SHIFT_PERCENT) + "% pour dashboard");
+   Log(LOG_INFO, "✅ Décalage graphique activé pour dashboard");
 }
 
 //+------------------------------------------------------------------+
@@ -1461,12 +1463,11 @@ void OnDeinit(const int reason)
    ObjectDelete(0, "Dashboard_Title");
    ObjectDelete(0, "Dashboard_Text");
 
-   // Restaurer le décalage graphique par défaut
+   // Restaurer les paramètres graphique par défaut
    if(AutoShiftChart && ShowDashboard) {
-      ChartSetInteger(0, CHART_SHIFT_SIZE, 10);  // Valeur par défaut MT5
-      ChartSetInteger(0, CHART_SHIFT, true);
+      ChartSetInteger(0, CHART_AUTOSCROLL, (long)1);  // Réactiver auto-scroll
       ChartRedraw(0);
-      Log(LOG_INFO, "Décalage graphique restauré");
+      Log(LOG_INFO, "Paramètres graphique restaurés");
    }
 
    Comment("");
