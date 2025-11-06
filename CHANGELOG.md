@@ -1,5 +1,82 @@
 # 📋 CHANGELOG - EA Multi-Paires Scalping Pro
 
+## Version 27.2-IMPROVED (06 Nov 2025)
+
+### 🚀 Améliorations majeures du code
+- ✅ **Constantes globales** pour valeurs magiques
+  - PIPS_TO_POINTS_MULTIPLIER (conversion pips/points)
+  - MIN_NEWS_UPDATE_INTERVAL (rate limiting)
+  - NEWS_RELOAD_INTERVAL (rechargement news)
+  - DASHBOARD_UPDATE_INTERVAL (refresh dashboard)
+  - MIN_JSON_FILE_SIZE (validation téléchargements)
+  - SECONDS_PER_DAY (calculs temporels)
+
+- ✅ **Validation complète des paramètres**
+  - Fonction ValidateInputParameters() exhaustive
+  - Validation de tous les paramètres scalping, risque, news, indicateurs
+  - Messages d'erreur détaillés et clairs
+  - Avertissements pour configurations sous-optimales
+  - Retour INIT_PARAMETERS_INCORRECT si invalide
+
+- ✅ **Système de logging avancé**
+  - Enum LOG_LEVEL (DEBUG, INFO, WARN, ERROR)
+  - Fonction Log() centralisée avec filtrage
+  - Support logging fichier optionnel
+  - Timestamps automatiques
+  - Performance optimisée
+
+- ✅ **Parsing JSON amélioré**
+  - Validation longueur minimale
+  - Vérification format tableau JSON
+  - Limite sécurité (1000 événements max)
+  - Validation événements avant ajout
+  - Messages d'erreur détaillés
+
+- ✅ **Validation dates ISO 8601**
+  - Fonction ParseDateString() avec vérifications complètes
+  - Validation plages (années 2000-2100, mois 1-12, etc.)
+  - Protection contre dates invalides
+  - ZeroMemory pour initialisation propre
+
+- ✅ **Optimisation boucles positions**
+  - Sortie anticipée dès limite atteinte
+  - Réduction appels PositionsTotal()
+  - GetTotalPositions() optimisé
+  - GetSymbolPositions() optimisé
+  - UpdateDashboard() optimisé
+
+- ✅ **Messages d'erreur détaillés**
+  - Fonction GetTradeErrorDescription() avec 40+ codes
+  - Erreurs trading explicites en français
+  - Logging structuré dans OpenPosition()
+  - Logging complet dans ManageAllPositions()
+  - Codes erreur + descriptions lisibles
+
+- ✅ **Documentation complète**
+  - Header fichier documenté (description, fonctionnalités, optimisations)
+  - Structures NewsEvent et SymbolIndicators commentées
+  - GetSignalForSymbol() avec documentation logique
+  - Commentaires inline pour sections critiques
+  - Version et date dans header
+
+### 📊 Statistiques améliorations
+- **Lignes ajoutées** : ~250 lignes de code amélioré
+- **Constantes** : 6 constantes globales ajoutées
+- **Validation** : 15+ paramètres validés automatiquement
+- **Logging** : 4 niveaux de sévérité
+- **Erreurs** : 40+ codes d'erreur documentés
+- **Performance** : Optimisation boucles (sortie anticipée)
+
+### 🎯 Impact
+- Code plus maintenable et lisible
+- Débogage facilité avec logging structuré
+- Réduction erreurs utilisateur (validation)
+- Messages d'erreur clairs et actionnables
+- Performance améliorée (optimisations)
+- Documentation technique complète
+
+---
+
 ## Version 27.2 (05 Nov 2025)
 
 ### ✨ Nouvelles fonctionnalités

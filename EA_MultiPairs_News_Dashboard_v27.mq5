@@ -1,11 +1,57 @@
 //+------------------------------------------------------------------+
 //| EA Multi-Paires Scalping Pro v27.0 - News Filter + Dashboard    |
-//| Filtre économique ForexFactory + Trading multi-symboles          |
+//| Expert Advisor pour trading scalping multi-paires               |
+//|------------------------------------------------------------------|
+//| DESCRIPTION:                                                     |
+//|   EA automatisé pour scalping sur 6 paires de devises avec:     |
+//|   - Filtre économique temps réel (ForexFactory API)             |
+//|   - Analyse technique multi-indicateurs (EMA, RSI, ATR)         |
+//|   - Gestion avancée du risque et du capital                     |
+//|   - Dashboard visuel en temps réel                              |
+//|   - Système de mise à jour automatique                          |
+//|                                                                  |
+//| FONCTIONNALITÉS PRINCIPALES:                                    |
+//|   ✓ Trading multi-symboles (EUR/USD, GBP/USD, USD/JPY, etc.)   |
+//|   ✓ Filtre news économiques (pause trading avant/après news)    |
+//|   ✓ Trailing Stop et Break-Even automatiques                    |
+//|   ✓ Limites journalières (pertes max, nombre trades)           |
+//|   ✓ Validation complète des paramètres d'entrée                |
+//|   ✓ Système de logging avancé avec niveaux de sévérité         |
+//|                                                                  |
+//| OPTIMISATIONS v27.2:                                            |
+//|   - Constantes pour valeurs magiques (pips, intervalles)       |
+//|   - Parsing JSON amélioré avec validation robuste              |
+//|   - Validation paramètres avec messages d'erreur détaillés     |
+//|   - Système logging avec LOG_DEBUG/INFO/WARN/ERROR             |
+//|   - Optimisation boucles (sortie anticipée)                    |
+//|   - Messages d'erreur détaillés pour codes trading             |
+//|                                                                  |
+//| AUTEUR: fred-selest                                             |
+//| GITHUB: https://github.com/fred-selest/ea-scalping-pro         |
+//| VERSION: 27.2                                                   |
+//| DATE: 2025-11-06                                                |
 //+------------------------------------------------------------------+
-#property version   "27.0"
+#property version   "27.2"
 #property strict
 #property description "Multi-Symbol Scalping EA avec News Filter"
 #property description "Dashboard temps réel + ONNX + FxPro optimisé"
+#property description "v27.2 - Améliorations: Constantes, Validation, Logging"
+
+// === CONSTANTS ===
+#define PIPS_TO_POINTS_MULTIPLIER 10    // Conversion pips to points (10 for 4/5 digit brokers)
+#define MIN_NEWS_UPDATE_INTERVAL 300    // Minimum 5 minutes between news API calls
+#define NEWS_RELOAD_INTERVAL 21600      // Reload news every 6 hours
+#define DASHBOARD_UPDATE_INTERVAL 2     // Update dashboard every 2 seconds
+#define MIN_JSON_FILE_SIZE 1000         // Minimum expected file size for downloaded updates
+#define SECONDS_PER_DAY 86400           // Seconds in a day for calculations
+
+// Logging levels
+enum LOG_LEVEL {
+   LOG_DEBUG = 0,
+   LOG_INFO = 1,
+   LOG_WARN = 2,
+   LOG_ERROR = 3
+};
 
 // === SYMBOLES À TRADER ===
 input group "=== TRADING SYMBOLS ==="
@@ -83,23 +129,28 @@ input int      MagicNumber = 270000;
 string symbols[];
 int symbol_count = 0;
 
+// Logging
+input LOG_LEVEL MinLogLevel = LOG_INFO;  // Niveau minimum de log
+bool EnableFileLogging = false;          // Log dans fichier (performance impact)
+
 // Statistiques
 int trades_today = 0;
 double daily_profit = 0;
 datetime current_day = 0;
 
-// News
+// === NEWS CALENDAR ===
+// Structure pour stocker les événements économiques du calendrier ForexFactory
 struct NewsEvent {
-   datetime time;
-   string title;
-   string country;
-   string impact;
-   string forecast;
-   string previous;
+   datetime time;       // Heure de l'événement (UTC)
+   string title;        // Nom de l'événement (ex: "Non-Farm Payrolls")
+   string country;      // Code devise (ex: "USD", "EUR")
+   string impact;       // Niveau impact: "High", "Medium", "Low"
+   string forecast;     // Prévision consensus
+   string previous;     // Valeur précédente
 };
-NewsEvent news_events[];
-datetime last_news_update = 0;
-bool news_filter_active = false;
+NewsEvent news_events[];           // Tableau des événements chargés
+datetime last_news_update = 0;     // Dernière mise à jour du calendrier
+bool news_filter_active = false;   // État actuel du filtre
 
 // Dashboard
 string dashboard_text = "";
@@ -111,18 +162,103 @@ datetime last_update_check = 0;
 bool update_available = false;
 string latest_version = "";
 
-// Handles indicateurs (par symbole)
+// === INDICATEURS TECHNIQUES ===
+// Structure contenant les handles des indicateurs pour chaque symbole
+// Chaque paire tradée a son propre jeu d'indicateurs indépendants
 struct SymbolIndicators {
-   string symbol;
-   int handle_ema_fast;
-   int handle_ema_slow;
-   int handle_rsi;
-   int handle_atr;
-   bool enabled;
-   int positions_count;
-   double last_profit;
+   string symbol;           // Nom du symbole (ex: "EURUSD")
+   int handle_ema_fast;     // Handle EMA rapide (défaut: 8 périodes)
+   int handle_ema_slow;     // Handle EMA lente (défaut: 21 périodes)
+   int handle_rsi;          // Handle RSI (défaut: 9 périodes)
+   int handle_atr;          // Handle ATR pour filtrage volatilité (défaut: 14)
+   bool enabled;            // Symbole actif pour trading
+   int positions_count;     // Nombre positions ouvertes pour ce symbole
+   double last_profit;      // Dernier profit enregistré
 };
-SymbolIndicators indicators[];
+SymbolIndicators indicators[];  // Tableau des indicateurs par symbole
+
+//+------------------------------------------------------------------+
+//| Fonction de logging avec niveaux de sévérité                    |
+//+------------------------------------------------------------------+
+void Log(LOG_LEVEL level, string message)
+{
+   // Filtrer selon niveau minimum
+   if(level < MinLogLevel) return;
+
+   string prefix = "";
+   switch(level) {
+      case LOG_DEBUG: prefix = "🔍 DEBUG: "; break;
+      case LOG_INFO:  prefix = "ℹ️ INFO: "; break;
+      case LOG_WARN:  prefix = "⚠️ WARN: "; break;
+      case LOG_ERROR: prefix = "❌ ERROR: "; break;
+   }
+
+   string full_message = prefix + message;
+   Print(full_message);
+
+   // Log dans fichier si activé (impact performance)
+   if(EnableFileLogging) {
+      int file = FileOpen("EA_Scalping_Log_" + IntegerToString(MagicNumber) + ".txt",
+                          FILE_WRITE|FILE_READ|FILE_TXT|FILE_COMMON);
+      if(file != INVALID_HANDLE) {
+         FileSeek(file, 0, SEEK_END);
+         FileWrite(file, TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + " | " + full_message);
+         FileClose(file);
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Obtenir description détaillée d'un code d'erreur trading        |
+//+------------------------------------------------------------------+
+string GetTradeErrorDescription(uint error_code)
+{
+   switch(error_code) {
+      case 10004: return "Serveur de trading occupé - Réessayer";
+      case 10006: return "Requête rejetée - Commande invalide";
+      case 10007: return "Requête annulée par le trader";
+      case 10008: return "Commande déjà placée";
+      case 10009: return "Commande envoyée - En attente confirmation";
+      case 10010: return "Requête acceptée";
+      case 10011: return "Requête en cours de traitement";
+      case 10012: return "Uniquement ordres en attente autorisés";
+      case 10013: return "Ouverture uniquement de positions longues autorisée";
+      case 10014: return "Ouverture uniquement de positions courtes autorisée";
+      case 10015: return "Clôture uniquement autorisée";
+      case 10016: return "Clôture position uniquement par position opposée";
+      case 10017: return "Clôture position uniquement par ordre de clôture";
+      case 10018: return "Nombre de positions ouvertes limite atteinte";
+      case 10019: return "Volume de transactions limité atteint";
+      case 10020: return "Nombre d'ordres en attente limite atteint";
+      case 10021: return "Volume d'ordres limité atteint";
+      case 10022: return "Ordre invalide (Stop Loss/Take Profit)";
+      case 10023: return "Ordre invalide (proche du marché)";
+      case 10024: return "Requête non valide - Aucun changement";
+      case 10025: return "Système d'auto-trading désactivé";
+      case 10026: return "Système d'auto-trading désactivé côté serveur";
+      case 10027: return "Requête verrouillée pour traitement";
+      case 10028: return "Position/Ordre gelé(e)";
+      case 10029: return "Type de remplissage d'ordre non supporté";
+      case 10030: return "Pas de connexion au serveur de trading";
+      case 10031: return "Uniquement comptes réels autorisés";
+      case 10032: return "Limite d'ordres en attente atteinte";
+      case 10033: return "Volume d'ordres et positions atteint la limite";
+      case 10034: return "Format ou paramètres d'ordre incorrects";
+      case 10035: return "Prix d'ordre invalide";
+      case 10036: return "Prix Stop Loss invalide";
+      case 10037: return "Prix Take Profit invalide";
+      case 10038: return "Volume invalide dans la requête";
+      case 10039: return "Prix marché inexistant";
+      case 10040: return "Symbole non disponible";
+      case 10041: return "Symbole désactivé";
+      case 10042: return "Validité de l'ordre expirée";
+      case 10043: return "Date d'expiration ordre invalide";
+      case 10044: return "Position avec ticket spécifié introuvable";
+      case 10045: return "Ordre avec ticket spécifié introuvable";
+      case 10046: return "Échec du trade - Pas de connexion";
+      default: return "Erreur inconnue: " + IntegerToString(error_code);
+   }
+}
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                    |
@@ -130,12 +266,18 @@ SymbolIndicators indicators[];
 int OnInit()
 {
    Print("🚀 EA Multi-Paires Scalping Pro v27.0 - Initialisation...");
-   
+
+   // Valider les paramètres d'entrée
+   if(!ValidateInputParameters()) {
+      Alert("❌ Paramètres invalides - Vérifiez les logs");
+      return(INIT_PARAMETERS_INCORRECT);
+   }
+
    // Autoriser WebRequest pour le calendrier économique
    if(!AddWebRequestURL()) {
       Print("⚠️ URLs WebRequest configurées - Redémarrage nécessaire");
    }
-   
+
    // Construire la liste des symboles
    BuildSymbolList();
    
@@ -173,6 +315,118 @@ int OnInit()
    PrintSymbolList();
    
    return(INIT_SUCCEEDED);
+}
+
+//+------------------------------------------------------------------+
+//| Valider les paramètres d'entrée                                 |
+//+------------------------------------------------------------------+
+bool ValidateInputParameters()
+{
+   bool valid = true;
+
+   // Validation des paramètres de scalping
+   if(ScalpTP_Pips <= 0 || ScalpTP_Pips > 100) {
+      Print("❌ ERREUR: ScalpTP_Pips doit être entre 0.1 et 100 (valeur: ", ScalpTP_Pips, ")");
+      valid = false;
+   }
+
+   if(ScalpSL_Pips <= 0 || ScalpSL_Pips > 200) {
+      Print("❌ ERREUR: ScalpSL_Pips doit être entre 0.1 et 200 (valeur: ", ScalpSL_Pips, ")");
+      valid = false;
+   }
+
+   if(TrailingStop_Pips < 0 || TrailingStop_Pips > 100) {
+      Print("❌ ERREUR: TrailingStop_Pips doit être entre 0 et 100 (valeur: ", TrailingStop_Pips, ")");
+      valid = false;
+   }
+
+   if(BreakEven_Pips < 0 || BreakEven_Pips > 100) {
+      Print("❌ ERREUR: BreakEven_Pips doit être entre 0 et 100 (valeur: ", BreakEven_Pips, ")");
+      valid = false;
+   }
+
+   // Validation gestion du risque
+   if(RiskPercent < 0 || RiskPercent > 10) {
+      Print("❌ ERREUR: RiskPercent doit être entre 0 et 10% (valeur: ", RiskPercent, ")");
+      valid = false;
+   }
+
+   if(MaxLotSize <= 0 || MaxLotSize > 100) {
+      Print("❌ ERREUR: MaxLotSize doit être entre 0.01 et 100 (valeur: ", MaxLotSize, ")");
+      valid = false;
+   }
+
+   if(MaxDailyLoss < 0 || MaxDailyLoss > 100) {
+      Print("❌ ERREUR: MaxDailyLoss doit être entre 0 et 100% (valeur: ", MaxDailyLoss, ")");
+      valid = false;
+   }
+
+   if(MaxTradesPerDay < 1 || MaxTradesPerDay > 1000) {
+      Print("❌ ERREUR: MaxTradesPerDay doit être entre 1 et 1000 (valeur: ", MaxTradesPerDay, ")");
+      valid = false;
+   }
+
+   if(MaxOpenPositions < 1 || MaxOpenPositions > 100) {
+      Print("❌ ERREUR: MaxOpenPositions doit être entre 1 et 100 (valeur: ", MaxOpenPositions, ")");
+      valid = false;
+   }
+
+   if(MaxPositionsPerSymbol < 1 || MaxPositionsPerSymbol > 50) {
+      Print("❌ ERREUR: MaxPositionsPerSymbol doit être entre 1 et 50 (valeur: ", MaxPositionsPerSymbol, ")");
+      valid = false;
+   }
+
+   // Validation filtre news
+   if(MinutesBeforeNews < 0 || MinutesBeforeNews > 240) {
+      Print("❌ ERREUR: MinutesBeforeNews doit être entre 0 et 240 (valeur: ", MinutesBeforeNews, ")");
+      valid = false;
+   }
+
+   if(MinutesAfterNews < 0 || MinutesAfterNews > 240) {
+      Print("❌ ERREUR: MinutesAfterNews doit être entre 0 et 240 (valeur: ", MinutesAfterNews, ")");
+      valid = false;
+   }
+
+   // Validation indicateurs techniques
+   if(EMA_Fast < 1 || EMA_Fast > 200) {
+      Print("❌ ERREUR: EMA_Fast doit être entre 1 et 200 (valeur: ", EMA_Fast, ")");
+      valid = false;
+   }
+
+   if(EMA_Slow < 1 || EMA_Slow > 200) {
+      Print("❌ ERREUR: EMA_Slow doit être entre 1 et 200 (valeur: ", EMA_Slow, ")");
+      valid = false;
+   }
+
+   if(EMA_Fast >= EMA_Slow) {
+      Print("❌ ERREUR: EMA_Fast (", EMA_Fast, ") doit être inférieur à EMA_Slow (", EMA_Slow, ")");
+      valid = false;
+   }
+
+   if(RSI_Period < 2 || RSI_Period > 100) {
+      Print("❌ ERREUR: RSI_Period doit être entre 2 et 100 (valeur: ", RSI_Period, ")");
+      valid = false;
+   }
+
+   if(ATR_Period < 2 || ATR_Period > 100) {
+      Print("❌ ERREUR: ATR_Period doit être entre 2 et 100 (valeur: ", ATR_Period, ")");
+      valid = false;
+   }
+
+   // Avertissements (non bloquants)
+   if(ScalpTP_Pips < ScalpSL_Pips) {
+      Print("⚠️ AVERTISSEMENT: TP (", ScalpTP_Pips, ") < SL (", ScalpSL_Pips, ") - Ratio risque/rendement défavorable");
+   }
+
+   if(RiskPercent > 2.0) {
+      Print("⚠️ AVERTISSEMENT: RiskPercent élevé (", RiskPercent, "%) - Risque accru");
+   }
+
+   if(valid) {
+      Print("✅ Tous les paramètres d'entrée sont valides");
+   }
+
+   return valid;
 }
 
 //+------------------------------------------------------------------+
@@ -272,7 +526,7 @@ void LoadNewsCalendar()
 {
    // Éviter les appels trop fréquents (rate limiting)
    static datetime last_attempt = 0;
-   if(TimeCurrent() - last_attempt < 300) { // Minimum 5 minutes entre tentatives
+   if(TimeCurrent() - last_attempt < MIN_NEWS_UPDATE_INTERVAL) {
       return;
    }
    last_attempt = TimeCurrent();
@@ -314,47 +568,65 @@ void LoadNewsCalendar()
 }
 
 //+------------------------------------------------------------------+
-//| Parser le JSON des news                                          |
+//| Parser le JSON des news avec gestion d'erreurs améliorée        |
 //+------------------------------------------------------------------+
 void ParseNewsJSON(string json)
 {
-   // Parsing simplifié (à améliorer avec bibliothèque JSON)
    ArrayResize(news_events, 0);
-   
-   // Note: Parsing manuel basique - améliorer avec JAson.mqh ou bibliothèque
-   // Format attendu: [{"title":"...","country":"USD","date":"...","impact":"High",...},...]
-   
+
+   // Validation du JSON
+   if(StringLen(json) < 10) {
+      Print("⚠️ JSON invalide: trop court (", StringLen(json), " caractères)");
+      return;
+   }
+
+   // Vérifier que c'est un tableau JSON
+   if(StringFind(json, "[") < 0) {
+      Print("⚠️ JSON invalide: pas de tableau détecté");
+      return;
+   }
+
+   // Note: Parsing manuel optimisé - Format: [{"title":"...","country":"USD",...},...]
    int start = 0;
    int count = 0;
-   
-   while(true) {
+   int max_events = 1000; // Limite de sécurité pour éviter boucles infinies
+
+   while(count < max_events) {
       int obj_start = StringFind(json, "{\"title\":", start);
       if(obj_start < 0) break;
-      
+
       int obj_end = StringFind(json, "},", obj_start);
       if(obj_end < 0) obj_end = StringFind(json, "}]", obj_start);
       if(obj_end < 0) break;
-      
+
+      // Extraire l'objet JSON
       string obj = StringSubstr(json, obj_start, obj_end - obj_start);
-      
-      // Extraire les champs (parsing basique)
+
+      // Extraire les champs avec validation
       NewsEvent event;
       event.title = ExtractField(obj, "title");
       event.country = ExtractField(obj, "country");
       event.impact = ExtractField(obj, "impact");
       event.forecast = ExtractField(obj, "forecast");
       event.previous = ExtractField(obj, "previous");
-      
+
       string date_str = ExtractField(obj, "date");
       event.time = ParseDateString(date_str);
-      
-      // Filtrer par devise
-      if(IsRelevantCurrency(event.country)) {
-         ArrayResize(news_events, count + 1);
-         news_events[count++] = event;
+
+      // Valider événement avant ajout
+      if(event.time > 0 && StringLen(event.country) > 0) {
+         // Filtrer par devise pertinente
+         if(IsRelevantCurrency(event.country)) {
+            ArrayResize(news_events, count + 1);
+            news_events[count++] = event;
+         }
       }
-      
+
       start = obj_end + 1;
+   }
+
+   if(count >= max_events) {
+      Print("⚠️ Limite d'événements atteinte (", max_events, "), certains événements ignorés");
    }
 }
 
@@ -375,23 +647,36 @@ string ExtractField(string json, string field)
 }
 
 //+------------------------------------------------------------------+
-//| Parser une date string en datetime                               |
+//| Parser une date string en datetime avec validation              |
 //+------------------------------------------------------------------+
 datetime ParseDateString(string date_str)
 {
-   // Format attendu: "2025-11-05T14:30:00+00:00"
-   // Parsing simplifié
-   
-   if(StringLen(date_str) < 19) return 0;
-   
+   // Format attendu: "2025-11-05T14:30:00+00:00" (ISO 8601)
+
+   // Validation longueur minimale
+   if(StringLen(date_str) < 19) {
+      return 0;
+   }
+
    MqlDateTime dt;
+   ZeroMemory(dt);
+
+   // Parser avec validation de plages
    dt.year = (int)StringToInteger(StringSubstr(date_str, 0, 4));
    dt.mon = (int)StringToInteger(StringSubstr(date_str, 5, 2));
    dt.day = (int)StringToInteger(StringSubstr(date_str, 8, 2));
    dt.hour = (int)StringToInteger(StringSubstr(date_str, 11, 2));
    dt.min = (int)StringToInteger(StringSubstr(date_str, 14, 2));
    dt.sec = (int)StringToInteger(StringSubstr(date_str, 17, 2));
-   
+
+   // Validation des valeurs
+   if(dt.year < 2000 || dt.year > 2100) return 0;
+   if(dt.mon < 1 || dt.mon > 12) return 0;
+   if(dt.day < 1 || dt.day > 31) return 0;
+   if(dt.hour < 0 || dt.hour > 23) return 0;
+   if(dt.min < 0 || dt.min > 59) return 0;
+   if(dt.sec < 0 || dt.sec > 59) return 0;
+
    return StructToTime(dt);
 }
 
@@ -418,9 +703,9 @@ bool IsRelevantCurrency(string currency)
 bool IsNewsTime(string symbol)
 {
    if(!UseNewsFilter) return false;
-   
-   // Recharger les news toutes les 6 heures (21600 secondes)
-   if(TimeCurrent() - last_news_update > 21600) {
+
+   // Recharger les news toutes les 6 heures
+   if(TimeCurrent() - last_news_update > NEWS_RELOAD_INTERVAL) {
       LoadNewsCalendar();
    }
    
@@ -463,6 +748,15 @@ bool IsNewsTime(string symbol)
 
 //+------------------------------------------------------------------+
 //| Obtenir le signal de trading pour un symbole                     |
+//| RETOUR:                                                           |
+//|   +1 = Signal BUY (EMA cross up OU RSI oversold + tendance)     |
+//|   -1 = Signal SELL (EMA cross down OU RSI overbought + tendance)|
+//|    0 = Pas de signal ou conditions non remplies                 |
+//| LOGIQUE:                                                          |
+//|   - Vérifie volatilité minimale avec ATR                        |
+//|   - Détecte croisements EMA (fast > slow = bullish)             |
+//|   - Confirme avec RSI (< 30 oversold, > 70 overbought)          |
+//|   - Valide position prix vs EMAs pour tendance                  |
 //+------------------------------------------------------------------+
 int GetSignalForSymbol(string symbol)
 {
@@ -491,9 +785,9 @@ int GetSignalForSymbol(string symbol)
    if(CopyBuffer(indicators[idx].handle_atr, 0, 0, 2, atr) <= 0) return 0;
    
    double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
-   
-   // Filtre ATR
-   if(atr[0] < ATR_Filter * 10 * point) return 0;
+
+   // Filtre ATR (utiliser la volatilité minimale)
+   if(atr[0] < ATR_Filter * PIPS_TO_POINTS_MULTIPLIER * point) return 0;
    
    // Analyse technique
    bool ema_cross_up = (ema_fast[1] <= ema_slow[1] && ema_fast[0] > ema_slow[0]);
@@ -536,8 +830,8 @@ bool CanTrade(string symbol)
    // Vérifier news
    if(IsNewsTime(symbol)) return false;
    
-   // Vérifier limites journalières
-   if(TimeCurrent() - current_day > 86400) {
+   // Vérifier limites journalières (reset quotidien)
+   if(TimeCurrent() - current_day > SECONDS_PER_DAY) {
       trades_today = 0;
       daily_profit = 0;
       current_day = TimeCurrent();
@@ -556,31 +850,52 @@ bool CanTrade(string symbol)
 }
 
 //+------------------------------------------------------------------+
-//| Compter les positions totales                                    |
+//| Compter les positions totales (optimisé avec sortie anticipée)  |
 //+------------------------------------------------------------------+
 int GetTotalPositions()
 {
    int count = 0;
-   for(int i = PositionsTotal() - 1; i >= 0; i--) {
+   int total = PositionsTotal();
+
+   // Optimisation: si limite déjà atteinte, pas besoin de tout compter
+   for(int i = total - 1; i >= 0; i--) {
+      if(count >= MaxOpenPositions) {
+         break; // Sortie anticipée
+      }
+
       ulong ticket = PositionGetTicket(i);
       if(!PositionSelectByTicket(ticket)) continue;
-      if(PositionGetInteger(POSITION_MAGIC) == MagicNumber) count++;
+      if(PositionGetInteger(POSITION_MAGIC) == MagicNumber) {
+         count++;
+      }
    }
+
    return count;
 }
 
 //+------------------------------------------------------------------+
-//| Compter les positions pour un symbole                            |
+//| Compter les positions pour un symbole (optimisé)                |
 //+------------------------------------------------------------------+
 int GetSymbolPositions(string symbol)
 {
    int count = 0;
-   for(int i = PositionsTotal() - 1; i >= 0; i--) {
+   int total = PositionsTotal();
+
+   // Optimisation: sortie anticipée si limite atteinte
+   for(int i = total - 1; i >= 0; i--) {
+      if(count >= MaxPositionsPerSymbol) {
+         break; // Sortie anticipée
+      }
+
       ulong ticket = PositionGetTicket(i);
       if(!PositionSelectByTicket(ticket)) continue;
+
       if(PositionGetInteger(POSITION_MAGIC) == MagicNumber &&
-         PositionGetString(POSITION_SYMBOL) == symbol) count++;
+         PositionGetString(POSITION_SYMBOL) == symbol) {
+         count++;
+      }
    }
+
    return count;
 }
 
@@ -610,9 +925,10 @@ bool OpenPosition(string symbol, int direction)
    
    double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
    int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
-   
-   double sl_distance = ScalpSL_Pips * 10 * point;
-   double tp_distance = ScalpTP_Pips * 10 * point;
+
+   // Calculer distances SL/TP en points
+   double sl_distance = ScalpSL_Pips * PIPS_TO_POINTS_MULTIPLIER * point;
+   double tp_distance = ScalpTP_Pips * PIPS_TO_POINTS_MULTIPLIER * point;
    
    if(direction > 0) {
       request.sl = NormalizeDouble(price - sl_distance, digits);
@@ -622,15 +938,25 @@ bool OpenPosition(string symbol, int direction)
       request.tp = NormalizeDouble(price - tp_distance, digits);
    }
    
-   if(!OrderSend(request, result)) return false;
-   
+   if(!OrderSend(request, result)) {
+      Log(LOG_ERROR, "Échec OrderSend pour " + symbol + " - Code: " + IntegerToString(GetLastError()));
+      return false;
+   }
+
    if(result.retcode == TRADE_RETCODE_DONE) {
       trades_today++;
-      Print("✅ ", symbol, " ", (direction > 0 ? "BUY" : "SELL"), " | Lot: ", lot);
+      Log(LOG_INFO, "✅ " + symbol + " " + (direction > 0 ? "BUY" : "SELL") +
+          " | Lot: " + DoubleToString(lot, 2) +
+          " | Ticket: " + IntegerToString(result.order));
       return true;
+   } else {
+      // Erreur détaillée avec description
+      string error_msg = "Échec ouverture " + symbol + " " + (direction > 0 ? "BUY" : "SELL") +
+                         " | Code: " + IntegerToString(result.retcode) +
+                         " | " + GetTradeErrorDescription(result.retcode);
+      Log(LOG_ERROR, error_msg);
+      return false;
    }
-   
-   return false;
 }
 
 //+------------------------------------------------------------------+
@@ -648,7 +974,8 @@ double CalculateLotSize(string symbol)
    double max_lot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
    double lot_step = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
    
-   double pip_value = tick_value / tick_size * point * 10;
+   // Calculer valeur du pip
+   double pip_value = tick_value / tick_size * point * PIPS_TO_POINTS_MULTIPLIER;
    double lot_size = risk_amount / (ScalpSL_Pips * pip_value);
    
    lot_size = MathFloor(lot_size / lot_step) * lot_step;
@@ -722,8 +1049,9 @@ void CreateDashboard()
 void UpdateDashboard()
 {
    if(!ShowDashboard) return;
-   if(TimeCurrent() - last_dashboard_update < 2) return;
-   
+   // Limiter fréquence de mise à jour pour performance
+   if(TimeCurrent() - last_dashboard_update < DASHBOARD_UPDATE_INTERVAL) return;
+
    last_dashboard_update = TimeCurrent();
    
    // Données
@@ -732,13 +1060,16 @@ void UpdateDashboard()
    double equity_pct = (equity / balance - 1) * 100;
    string currency = AccountInfoString(ACCOUNT_CURRENCY);
    
+   // Calculer positions et profit (optimisé)
    int total_pos = 0;
    double total_profit = 0;
-   
-   for(int j = PositionsTotal() - 1; j >= 0; j--) {
+   int positions_total = PositionsTotal();
+
+   for(int j = positions_total - 1; j >= 0; j--) {
       ulong ticket = PositionGetTicket(j);
       if(!PositionSelectByTicket(ticket)) continue;
       if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+
       total_pos++;
       total_profit += PositionGetDouble(POSITION_PROFIT);
    }
@@ -831,11 +1162,12 @@ void ManageAllPositions()
                              SymbolInfoDouble(symbol, SYMBOL_BID) : 
                              SymbolInfoDouble(symbol, SYMBOL_ASK);
       
+      // Calculer profit en pips
       double profit_pips = 0;
       if(type == POSITION_TYPE_BUY) {
-         profit_pips = (current_price - entry) / (10 * point);
+         profit_pips = (current_price - entry) / (PIPS_TO_POINTS_MULTIPLIER * point);
       } else {
-         profit_pips = (entry - current_price) / (10 * point);
+         profit_pips = (entry - current_price) / (PIPS_TO_POINTS_MULTIPLIER * point);
       }
       
       bool modified = false;
@@ -847,9 +1179,9 @@ void ManageAllPositions()
          modified = true;
       }
       
-      // Trailing Stop
+      // Trailing Stop (activer si profit suffisant)
       if(profit_pips >= TrailingStop_Pips) {
-         double trail_distance = TrailingStop_Pips * 10 * point;
+         double trail_distance = TrailingStop_Pips * PIPS_TO_POINTS_MULTIPLIER * point;
          double new_trail_sl;
          
          if(type == POSITION_TYPE_BUY) {
@@ -880,7 +1212,12 @@ void ManageAllPositions()
          request.tp = current_tp;
          
          if(!OrderSend(request, result)) {
-            Print("⚠️ Erreur modification SL ticket ", ticket, ": ", result.retcode);
+            Log(LOG_ERROR, "Échec modification SL ticket " + IntegerToString(ticket) +
+                " | Code: " + IntegerToString(result.retcode) +
+                " | " + GetTradeErrorDescription(result.retcode));
+         } else if(result.retcode == TRADE_RETCODE_DONE) {
+            Log(LOG_DEBUG, "SL modifié pour ticket " + IntegerToString(ticket) +
+                " | Nouveau SL: " + DoubleToString(new_sl, digits));
          }
       }
    }
@@ -983,8 +1320,9 @@ void DownloadAndInstallUpdate()
    
    if(res == 200) {
       string new_code = CharArrayToString(result);
-      
-      if(StringLen(new_code) < 1000) {
+
+      // Validation taille fichier téléchargé
+      if(StringLen(new_code) < MIN_JSON_FILE_SIZE) {
          Print("❌ Fichier téléchargé trop petit, probablement erreur");
          return;
       }
