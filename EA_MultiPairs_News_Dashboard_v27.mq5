@@ -44,6 +44,8 @@
 #define DASHBOARD_UPDATE_INTERVAL 2     // Update dashboard every 2 seconds
 #define MIN_JSON_FILE_SIZE 1000         // Minimum expected file size for downloaded updates
 #define SECONDS_PER_DAY 86400           // Seconds in a day for calculations
+#define DASHBOARD_WIDTH 380             // Dashboard width + margin for chart shift
+#define CHART_SHIFT_PERCENT 15          // Percentage of chart shift for dashboard space
 
 // Logging levels
 enum LOG_LEVEL {
@@ -102,6 +104,7 @@ input int      Dashboard_X = 20;            // Position X
 input int      Dashboard_Y = 30;            // Position Y
 input color    Dashboard_Color = clrWhite;  // Couleur texte
 input color    Dashboard_BG = clrNavy;      // Couleur fond
+input bool     AutoShiftChart = true;      // Décaler graphique auto pour dashboard
 
 // === TRADING HOURS ===
 input group "=== TRADING HOURS ==="
@@ -302,6 +305,8 @@ int OnInit()
       CreateDashboard();
       // Forcer la première mise à jour immédiate
       Sleep(100);
+      // Décaler le graphique pour laisser le dashboard visible
+      ShiftChartForDashboard();
       UpdateDashboard();
    }
    
@@ -1044,6 +1049,31 @@ void CreateDashboard()
 }
 
 //+------------------------------------------------------------------+
+//| Décaler le graphique pour laisser espace au dashboard           |
+//+------------------------------------------------------------------+
+void ShiftChartForDashboard()
+{
+   if(!ShowDashboard || !AutoShiftChart) return;
+
+   // Obtenir largeur graphique
+   long chart_width = ChartGetInteger(0, CHART_WIDTH_IN_PIXELS);
+
+   if(chart_width <= 0) {
+      Log(LOG_WARN, "Impossible d'obtenir largeur graphique");
+      return;
+   }
+
+   // Appliquer décalage de 15% pour faire de la place au dashboard
+   ChartSetInteger(0, CHART_SHIFT_SIZE, CHART_SHIFT_PERCENT);
+   ChartSetInteger(0, CHART_SHIFT, true);
+
+   // Forcer actualisation
+   ChartRedraw(0);
+
+   Log(LOG_INFO, "✅ Graphique décalé de " + IntegerToString(CHART_SHIFT_PERCENT) + "% pour dashboard");
+}
+
+//+------------------------------------------------------------------+
 //| Mettre à jour le dashboard SIMPLIFIÉ                            |
 //+------------------------------------------------------------------+
 void UpdateDashboard()
@@ -1430,7 +1460,15 @@ void OnDeinit(const int reason)
    ObjectDelete(0, "Dashboard_BG");
    ObjectDelete(0, "Dashboard_Title");
    ObjectDelete(0, "Dashboard_Text");
-   
+
+   // Restaurer le décalage graphique par défaut
+   if(AutoShiftChart && ShowDashboard) {
+      ChartSetInteger(0, CHART_SHIFT_SIZE, 10);  // Valeur par défaut MT5
+      ChartSetInteger(0, CHART_SHIFT, true);
+      ChartRedraw(0);
+      Log(LOG_INFO, "Décalage graphique restauré");
+   }
+
    Comment("");
    
    Print("✅ EA Multi-Paires arrêté | Stats: ", trades_today, " trades | P&L: ", 
