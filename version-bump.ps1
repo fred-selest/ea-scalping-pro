@@ -43,34 +43,28 @@ if (-not (Test-Path $CHANGELOG_FILE)) { Write-Error-Custom "$CHANGELOG_FILE intr
 $CURRENT_VERSION = (Get-Content $VERSION_FILE -Raw).Trim()
 Write-Info "Version actuelle: $CURRENT_VERSION"
 
-# Séparer MAJOR.MINOR.PATCH
+# Séparer MAJOR.MINOR (format à 2 chiffres)
 $versionParts = $CURRENT_VERSION.Split('.')
 $MAJOR = [int]$versionParts[0]
 $MINOR = if ($versionParts.Length -gt 1) { [int]$versionParts[1] } else { 0 }
-$PATCH = if ($versionParts.Length -gt 2) { [int]$versionParts[2] } else { 0 }
 
 # Calculer la nouvelle version
 switch ($Type) {
     "major" {
         $MAJOR++
         $MINOR = 0
-        $PATCH = 0
     }
-    "minor" {
+    { $_ -in "minor", "patch" } {
         $MINOR++
-        $PATCH = 0
-    }
-    "patch" {
-        $PATCH++
     }
 }
 
-$NEW_VERSION = "$MAJOR.$MINOR.$PATCH"
+$NEW_VERSION = "$MAJOR.$MINOR"
 Write-Info "Nouvelle version: $NEW_VERSION"
 
-# Calculer format MQL5 Market (xxx.yyy)
-# Format: Major sans padding, Minor*100+Patch avec 3 chiffres (ex: 27.500)
-$MQL5_VERSION = "{0}.{1:000}" -f $MAJOR, ($MINOR * 100 + $PATCH)
+# Calculer format MQL5 Market (xxx.yyy0)
+# Format: MAJOR.MINOR0 (ex: 27.51 → 27.510)
+$MQL5_VERSION = "{0}.{1}0" -f $MAJOR, $MINOR
 Write-Info "Format MQL5 Market: $MQL5_VERSION"
 
 # Demander confirmation
@@ -113,8 +107,8 @@ $eaContent = $eaContent -replace '#define CURRENT_VERSION "[\d\.]+"', "#define C
 # Remplacer dashboard title
 $eaContent = $eaContent -replace 'ObjectSetString\(0, "Dashboard_Title", OBJPROP_TEXT, "EA SCALPING v[\d\.]+"\);', "ObjectSetString(0, `"Dashboard_Title`", OBJPROP_TEXT, `"EA SCALPING v$NEW_VERSION`");"
 
-# Mettre à jour MagicNumber
-$NEW_MAGIC = $MAJOR * 10000 + $MINOR * 100 + $PATCH
+# Mettre à jour MagicNumber (format: MAJOR * 10000 + MINOR * 10)
+$NEW_MAGIC = $MAJOR * 10000 + $MINOR * 10
 $eaContent = $eaContent -replace 'input int\s+MagicNumber = \d+;.*', "input int      MagicNumber = $NEW_MAGIC;  // Magic number v$NEW_VERSION"
 
 $eaContent | Out-File -FilePath $EA_FILE -Encoding UTF8
