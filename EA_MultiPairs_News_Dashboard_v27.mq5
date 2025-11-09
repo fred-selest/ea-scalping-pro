@@ -31,10 +31,10 @@
 //|                                                                  |
 //| AUTEUR: fred-selest                                             |
 //| GITHUB: https://github.com/fred-selest/ea-scalping-pro         |
-//| VERSION: 27.4.1                                                   |
+//| VERSION: 27.4.2                                                   |
 //| DATE: 2025-11-09                                                
 //+------------------------------------------------------------------+
-#property version   "27.4.1"
+#property version   "27.4.2"
 #property strict
 #property description "Multi-Symbol Scalping EA avec News Filter"
 #property description "Dashboard temps réel + ONNX + Correctifs Critiques v27.4"
@@ -107,7 +107,7 @@ input int      Dashboard_X = 20;            // Position X
 input int      Dashboard_Y = 30;            // Position Y
 input color    Dashboard_Color = clrWhite;  // Couleur texte
 input color    Dashboard_BG = clrNavy;      // Couleur fond
-input bool     AutoShiftChart = true;      // Décaler graphique auto pour dashboard
+input bool     AutoShiftChart = false;     // Décaler graphique auto (désactivé, dashboard à droite)
 
 // === TRADING HOURS ===
 input group "=== TRADING HOURS ==="
@@ -129,7 +129,7 @@ input bool     EnableAutoUpdate = false;    // Activer mises à jour auto
 input string   UpdateURL = "https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_News_Dashboard_v27.mq5";
 input int      CheckUpdateEveryHours = 24;  // Vérifier MAJ toutes les X heures
 
-input int      MagicNumber = 270401;  // Magic number v27.4.1
+input int      MagicNumber = 270402;  // Magic number v27.4.2
 
 // === VARIABLES GLOBALES ===
 string symbols[];
@@ -163,7 +163,7 @@ string dashboard_text = "";
 datetime last_dashboard_update = 0;
 
 // Auto-Update
-#define CURRENT_VERSION "27.4.1"
+#define CURRENT_VERSION "27.4.2"
 datetime last_update_check = 0;
 bool update_available = false;
 string latest_version = "";
@@ -318,7 +318,7 @@ int OnInit()
    if(ShowDashboard) {
       CreateDashboard();
       Sleep(100);
-      ShiftChartForDashboard();
+      // ShiftChartForDashboard();  // ✅ Désactivé: dashboard maintenant à droite
       UpdateDashboard();
    }
 
@@ -1243,7 +1243,7 @@ void CreateDashboard()
    ObjectDelete(0, "Dashboard_BG");
    ObjectDelete(0, "Dashboard_Title");
 
-   // Fond
+   // Fond - Positionné à DROITE du graphique
    ObjectCreate(0, "Dashboard_BG", OBJ_RECTANGLE_LABEL, 0, 0, 0);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_XDISTANCE, Dashboard_X);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_YDISTANCE, Dashboard_Y);
@@ -1251,39 +1251,39 @@ void CreateDashboard()
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_YSIZE, 300);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_BGCOLOR, clrBlack);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_BORDER_TYPE, BORDER_FLAT);
-   ObjectSetInteger(0, "Dashboard_BG", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, "Dashboard_BG", OBJPROP_CORNER, CORNER_RIGHT_UPPER);  // ✅ Changé pour droite
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_COLOR, clrDodgerBlue);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_WIDTH, 2);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_BACK, true);
 
-   // Titre
+   // Titre - Positionné à droite
    ObjectCreate(0, "Dashboard_Title", OBJ_LABEL, 0, 0, 0);
-   ObjectSetInteger(0, "Dashboard_Title", OBJPROP_XDISTANCE, Dashboard_X + 20);
+   ObjectSetInteger(0, "Dashboard_Title", OBJPROP_XDISTANCE, Dashboard_X + 340);  // Ajusté pour droite
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_YDISTANCE, Dashboard_Y + 10);
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_COLOR, clrYellow);
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_FONTSIZE, 11);
    ObjectSetString(0, "Dashboard_Title", OBJPROP_FONT, "Arial Black");
-   ObjectSetString(0, "Dashboard_Title", OBJPROP_TEXT, "EA SCALPING v27.4.1");
-   ObjectSetInteger(0, "Dashboard_Title", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetString(0, "Dashboard_Title", OBJPROP_TEXT, "EA SCALPING v27.4.2");
+   ObjectSetInteger(0, "Dashboard_Title", OBJPROP_CORNER, CORNER_RIGHT_UPPER);  // ✅ Changé pour droite
 
-   // Créer lignes de texte
+   // Créer lignes de texte - Positionnées à droite
    int yPos = Dashboard_Y + 40;
    int lineHeight = 18;
 
    for(int i=0; i<14; i++) {
       string objName = "Dash_"+IntegerToString(i);
       ObjectCreate(0, objName, OBJ_LABEL, 0, 0, 0);
-      ObjectSetInteger(0, objName, OBJPROP_XDISTANCE, Dashboard_X + 15);
+      ObjectSetInteger(0, objName, OBJPROP_XDISTANCE, Dashboard_X + 345);  // Ajusté pour droite
       ObjectSetInteger(0, objName, OBJPROP_YDISTANCE, yPos + (i * lineHeight));
       ObjectSetInteger(0, objName, OBJPROP_COLOR, clrWhite);
       ObjectSetInteger(0, objName, OBJPROP_FONTSIZE, 9);
       ObjectSetString(0, objName, OBJPROP_FONT, "Courier New");
-      ObjectSetInteger(0, objName, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetInteger(0, objName, OBJPROP_CORNER, CORNER_RIGHT_UPPER);  // ✅ Changé pour droite
       ObjectSetString(0, objName, OBJPROP_TEXT, "Chargement...");
    }
 
    ChartRedraw(0);
-   Log(LOG_INFO, "✅ Dashboard créé (14 lignes)");
+   Log(LOG_INFO, "✅ Dashboard créé à droite (14 lignes)");
 }
 
 //+------------------------------------------------------------------+

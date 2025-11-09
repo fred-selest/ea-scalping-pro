@@ -1,5 +1,13 @@
 # 📋 CHANGELOG - EA Multi-Paires Scalping Pro
 
+## Version 27.4.2 (2025-11-09)
+
+### 🐛 Correctif
+- Fix: Dashboard positionné à droite du graphique MT5
+
+---
+
+
 ## Version 27.4.1 (2025-11-09)
 
 ### 📝 Documentation
