@@ -93,7 +93,7 @@ Refactor: Simplification ParseNewsJSON
 
 Travaillez normalement sur votre code :
 ```bash
-# Modifier EA_MultiPairs_News_Dashboard_v27.mq5
+# Modifier EA_MultiPairs_Scalping_Pro.mq5
 # Tester les changements
 # Compiler (F7) pour vérifier
 ```

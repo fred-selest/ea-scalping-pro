@@ -25,7 +25,7 @@ param(
 # Configuration
 $ErrorActionPreference = "Stop"
 $VERSION_FILE = "VERSION.txt"
-$EA_FILE = "EA_MultiPairs_News_Dashboard_v27.mq5"
+$EA_FILE = "EA_MultiPairs_Scalping_Pro.mq5"
 $CHANGELOG_FILE = "CHANGELOG.md"
 
 # Fonctions d'affichage avec couleurs
@@ -159,7 +159,7 @@ $Type($NEW_VERSION): $Description
 
 Fichiers modifiés:
 - VERSION.txt
-- EA_MultiPairs_News_Dashboard_v27.mq5
+- EA_MultiPairs_Scalping_Pro.mq5
 - CHANGELOG.md
 "@
 

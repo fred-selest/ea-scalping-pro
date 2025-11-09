@@ -1,5 +1,13 @@
 # 📋 CHANGELOG - EA Multi-Paires Scalping Pro
 
+## Version 27.4.3 (2025-11-09)
+
+### ♻️  Refactoring
+- Refactor: Renommage fichier EA → EA_MultiPairs_Scalping_Pro.mq5
+
+---
+
+
 ## Version 27.4.2 (2025-11-09)
 
 ### 🐛 Correctif
