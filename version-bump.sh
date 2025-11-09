@@ -44,7 +44,7 @@ fi
 
 # Fichiers à mettre à jour
 VERSION_FILE="VERSION.txt"
-EA_FILE="EA_MultiPairs_News_Dashboard_v27.mq5"
+EA_FILE="EA_MultiPairs_Scalping_Pro.mq5"
 CHANGELOG_FILE="CHANGELOG.md"
 
 # Vérifier que les fichiers existent
@@ -174,7 +174,7 @@ COMMIT_MESSAGE="$BUMP_TYPE($NEW_VERSION): $DESCRIPTION
 
 Fichiers modifiés:
 - VERSION.txt
-- EA_MultiPairs_News_Dashboard_v27.mq5
+- EA_MultiPairs_Scalping_Pro.mq5
 - CHANGELOG.md"
 
 git commit -m "$COMMIT_MESSAGE"

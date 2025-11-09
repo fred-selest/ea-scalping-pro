@@ -32,7 +32,7 @@ Expert Advisor automatisé pour trading scalping multi-paires avec filtre news F
 
 ## 📦 Installation
 
-1. **Télécharger** le fichier `EA_MultiPairs_News_Dashboard_v27.mq5`
+1. **Télécharger** le fichier `EA_MultiPairs_Scalping_Pro.mq5`
 2. **Copier** dans le dossier `MQL5/Experts/` de MT5
 3. **Compiler** dans MetaEditor (F7)
 4. **Glisser** sur un graphique MT5
