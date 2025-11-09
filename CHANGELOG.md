@@ -1,5 +1,13 @@
 # 📋 CHANGELOG - EA Multi-Paires Scalping Pro
 
+## Version 27.4.1 (2025-11-09)
+
+### 📝 Documentation
+- Doc: Ajout système gestion versions automatique
+
+---
+
+
 ## Version 27.4 (08 Nov 2025)
 
 ### 🔴 CORRECTIFS CRITIQUES

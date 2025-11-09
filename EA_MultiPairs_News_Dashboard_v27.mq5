@@ -31,10 +31,10 @@
 //|                                                                  |
 //| AUTEUR: fred-selest                                             |
 //| GITHUB: https://github.com/fred-selest/ea-scalping-pro         |
-//| VERSION: 27.4                                                   |
-//| DATE: 2025-11-08                                                |
+//| VERSION: 27.4.1                                                   |
+//| DATE: 2025-11-09                                                
 //+------------------------------------------------------------------+
-#property version   "27.4"
+#property version   "27.4.1"
 #property strict
 #property description "Multi-Symbol Scalping EA avec News Filter"
 #property description "Dashboard temps réel + ONNX + Correctifs Critiques v27.4"
@@ -129,7 +129,7 @@ input bool     EnableAutoUpdate = false;    // Activer mises à jour auto
 input string   UpdateURL = "https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_News_Dashboard_v27.mq5";
 input int      CheckUpdateEveryHours = 24;  // Vérifier MAJ toutes les X heures
 
-input int      MagicNumber = 274000;  // Nouveau magic number pour v27.4
+input int      MagicNumber = 270401;  // Magic number v27.4.1
 
 // === VARIABLES GLOBALES ===
 string symbols[];
@@ -163,7 +163,7 @@ string dashboard_text = "";
 datetime last_dashboard_update = 0;
 
 // Auto-Update
-#define CURRENT_VERSION "27.4"
+#define CURRENT_VERSION "27.4.1"
 datetime last_update_check = 0;
 bool update_available = false;
 string latest_version = "";
@@ -1263,7 +1263,7 @@ void CreateDashboard()
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_COLOR, clrYellow);
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_FONTSIZE, 11);
    ObjectSetString(0, "Dashboard_Title", OBJPROP_FONT, "Arial Black");
-   ObjectSetString(0, "Dashboard_Title", OBJPROP_TEXT, "EA SCALPING v27.4");
+   ObjectSetString(0, "Dashboard_Title", OBJPROP_TEXT, "EA SCALPING v27.4.1");
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_CORNER, CORNER_LEFT_UPPER);
 
    // Créer lignes de texte
