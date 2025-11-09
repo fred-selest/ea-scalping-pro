@@ -1,5 +1,13 @@
 # 📋 CHANGELOG - EA Multi-Paires Scalping Pro
 
+## Version 27.52 (2025-11-09)
+
+### ♻️  Refactoring
+- Refactor: Passage au format de version à 2 chiffres (27.51, 27.52)
+
+---
+
+
 ## Version 27.5.1 (2025-11-09)
 
 ### 🐛 Correctif
