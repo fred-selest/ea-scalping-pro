@@ -1,5 +1,13 @@
 # 📋 CHANGELOG - EA Multi-Paires Scalping Pro
 
+## Version 27.5.0 (2025-11-09)
+
+### ✨ Nouvelle fonctionnalité
+- Add: Système d'archivage automatique + format MQL5 Market (xxx.yyy)
+
+---
+
+
 ## Version 27.4.3 (2025-11-09)
 
 ### ♻️  Refactoring
