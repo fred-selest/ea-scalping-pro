@@ -68,11 +68,23 @@ switch ($Type) {
 $NEW_VERSION = "$MAJOR.$MINOR.$PATCH"
 Write-Info "Nouvelle version: $NEW_VERSION"
 
+# Calculer format MQL5 Market (xxx.yyy)
+$MQL5_VERSION = "{0:000}.{1:000}" -f $MAJOR, ($MINOR * 100 + $PATCH)
+Write-Info "Format MQL5 Market: $MQL5_VERSION"
+
 # Demander confirmation
 $confirmation = Read-Host "Confirmer le bump de version $CURRENT_VERSION → $NEW_VERSION ? (y/n)"
 if ($confirmation -ne 'y' -and $confirmation -ne 'Y') {
     Write-Warning-Custom "Opération annulée"
     exit 0
+}
+
+# ✅ Archiver la version actuelle avant le bump
+Write-Info "Archivage de la version actuelle..."
+if (Test-Path ".\archive-version.sh") {
+    & bash .\archive-version.sh
+} else {
+    Write-Warning-Custom "Script d'archivage introuvable (archive-version.sh)"
 }
 
 Write-Info "Mise à jour des fichiers..."
@@ -84,8 +96,8 @@ Write-Success "VERSION.txt mis à jour"
 # 2. Mettre à jour le fichier EA
 $eaContent = Get-Content $EA_FILE -Raw
 
-# Remplacer #property version
-$eaContent = $eaContent -replace '#property version\s+"[\d\.]+"', "#property version   `"$NEW_VERSION`""
+# Remplacer #property version - Format MQL5 Market
+$eaContent = $eaContent -replace '#property version\s+"[\d\.]+"', "#property version   `"$MQL5_VERSION`""
 
 # Remplacer //| VERSION:
 $eaContent = $eaContent -replace '//\| VERSION:.*', "//| VERSION: $NEW_VERSION                                                   |"
