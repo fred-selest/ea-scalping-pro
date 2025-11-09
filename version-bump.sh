@@ -81,6 +81,10 @@ esac
 NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
 print_info "Nouvelle version: $NEW_VERSION"
 
+# Calculer format MQL5 Market (xxx.yyy)
+MQL5_VERSION=$(printf "%03d.%03d" $MAJOR $((MINOR * 100 + PATCH)))
+print_info "Format MQL5 Market: $MQL5_VERSION"
+
 # Demander confirmation
 read -p "Confirmer le bump de version $CURRENT_VERSION → $NEW_VERSION ? (y/n) " -n 1 -r
 echo
@@ -89,15 +93,23 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
+# ✅ Archiver la version actuelle avant le bump
+print_info "Archivage de la version actuelle..."
+if [ -f "./archive-version.sh" ]; then
+    ./archive-version.sh
+else
+    print_warning "Script d'archivage introuvable (archive-version.sh)"
+fi
+
 print_info "Mise à jour des fichiers..."
 
 # 1. Mettre à jour VERSION.txt
 echo "$NEW_VERSION" > "$VERSION_FILE"
 print_success "VERSION.txt mis à jour"
 
-# 2. Mettre à jour le header de l'EA (ligne VERSION)
-sed -i "s/^#property version.*/#property version   \"$NEW_VERSION\"/" "$EA_FILE"
-print_success "EA header mis à jour (#property version)"
+# 2. Mettre à jour le header de l'EA (ligne VERSION) - Format MQL5 Market
+sed -i "s/^#property version.*/#property version   \"$MQL5_VERSION\"/" "$EA_FILE"
+print_success "EA header mis à jour (#property version $MQL5_VERSION)"
 
 # 3. Mettre à jour le header de l'EA (ligne //| VERSION:)
 sed -i "s|^//\| VERSION:.*|//\| VERSION: $NEW_VERSION                                                   \||" "$EA_FILE"
