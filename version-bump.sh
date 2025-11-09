@@ -56,33 +56,28 @@ CHANGELOG_FILE="CHANGELOG.md"
 CURRENT_VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
 print_info "Version actuelle: $CURRENT_VERSION"
 
-# Séparer MAJOR.MINOR.PATCH
+# Séparer MAJOR.MINOR (format à 2 chiffres)
 IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
 MAJOR=${VERSION_PARTS[0]}
 MINOR=${VERSION_PARTS[1]:-0}
-PATCH=${VERSION_PARTS[2]:-0}
 
 # Calculer la nouvelle version
 case $BUMP_TYPE in
     major)
         MAJOR=$((MAJOR + 1))
         MINOR=0
-        PATCH=0
         ;;
-    minor)
+    minor|patch)
         MINOR=$((MINOR + 1))
-        PATCH=0
-        ;;
-    patch)
-        PATCH=$((PATCH + 1))
         ;;
 esac
 
-NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+NEW_VERSION="${MAJOR}.${MINOR}"
 print_info "Nouvelle version: $NEW_VERSION"
 
-# Calculer format MQL5 Market (xxx.yyy)
-MQL5_VERSION=$(printf "%03d.%03d" $MAJOR $((MINOR * 100 + PATCH)))
+# Calculer format MQL5 Market (xxx.yyy0)
+# Format: MAJOR.MINOR0 (ex: 27.51 → 27.510)
+MQL5_VERSION=$(printf "%d.%d0" $MAJOR $MINOR)
 print_info "Format MQL5 Market: $MQL5_VERSION"
 
 # Demander confirmation
@@ -128,8 +123,8 @@ print_success "CURRENT_VERSION mis à jour"
 sed -i "s/ObjectSetString(0, \"Dashboard_Title\", OBJPROP_TEXT, \"EA SCALPING v[0-9.]*\");/ObjectSetString(0, \"Dashboard_Title\", OBJPROP_TEXT, \"EA SCALPING v$NEW_VERSION\");/" "$EA_FILE"
 print_success "Dashboard title mis à jour"
 
-# 7. Mettre à jour MagicNumber (format: MAJOR * 10000 + MINOR * 100 + PATCH)
-NEW_MAGIC=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+# 7. Mettre à jour MagicNumber (format: MAJOR * 10000 + MINOR * 10)
+NEW_MAGIC=$((MAJOR * 10000 + MINOR * 10))
 sed -i "s/input int      MagicNumber = [0-9]*;.*$/input int      MagicNumber = $NEW_MAGIC;  \/\/ Magic number v$NEW_VERSION/" "$EA_FILE"
 print_success "MagicNumber mis à jour: $NEW_MAGIC"
 
