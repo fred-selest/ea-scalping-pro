@@ -60,3 +60,9 @@ if [ "$ARCHIVE_COUNT" -gt "$MAX_ARCHIVES" ]; then
     ls -t "$VERSIONS_DIR"/*.mq5 | tail -n +$((MAX_ARCHIVES + 1)) | xargs -r rm -f
     print_success "Archives nettoyées"
 fi
+
+# Ajouter l'archive à Git (si dans un dépôt Git)
+if [ -d ".git" ]; then
+    git add "$VERSIONS_DIR/$ARCHIVE_NAME" 2>/dev/null || true
+    print_info "Archive ajoutée à Git (sera commitée avec le version bump)"
+fi

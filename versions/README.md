@@ -2,16 +2,18 @@
 
 Ce dossier contient les archives automatiques des versions précédentes du fichier EA.
 
+**📍 Accessible en ligne :** [github.com/fred-selest/ea-scalping-pro/tree/main/versions](https://github.com/fred-selest/ea-scalping-pro/tree/main/versions)
+
 ## 📋 Structure
 
 Chaque fichier archivé suit le format :
 ```
-EA_MultiPairs_Scalping_Pro_vX.Y.Z_YYYYMMDD_HHMMSS.mq5
+EA_MultiPairs_Scalping_Pro_vX.Y_YYYYMMDD_HHMMSS.mq5
 ```
 
 Exemple :
 ```
-EA_MultiPairs_Scalping_Pro_v27.4.3_20251109_193000.mq5
+EA_MultiPairs_Scalping_Pro_v27.52_20251109_195000.mq5
 ```
 
 ## 🔄 Archivage automatique
@@ -58,10 +60,11 @@ MAX_ARCHIVES=10  # Modifier cette valeur
 
 ## 📝 Notes
 
-- Les archives ne sont **pas commitées dans Git** (ajoutées au `.gitignore`)
-- Les archives sont **locales** à votre machine
+- Les archives sont **automatiquement commitées dans Git** et visibles sur GitHub
+- Chaque nouvelle archive est ajoutée au dépôt lors du version bump
 - Utiles pour **rollback rapide** en cas de problème
 - Permettent de **comparer facilement** les versions
+- Accessibles en ligne sur : `https://github.com/fred-selest/ea-scalping-pro/tree/main/versions`
 
 ## 🔍 Trouver une version spécifique
 
