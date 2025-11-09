@@ -1,5 +1,13 @@
 # 📋 CHANGELOG - EA Multi-Paires Scalping Pro
 
+## Version 27.5.1 (2025-11-09)
+
+### 🐛 Correctif
+- Fix: Format MQL5 Market - suppression leading zeros (27.500 au lieu de 027.500)
+
+---
+
+
 ## Version 27.5.0 (2025-11-09)
 
 ### ✨ Nouvelle fonctionnalité
