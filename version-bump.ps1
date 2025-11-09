@@ -69,7 +69,8 @@ $NEW_VERSION = "$MAJOR.$MINOR.$PATCH"
 Write-Info "Nouvelle version: $NEW_VERSION"
 
 # Calculer format MQL5 Market (xxx.yyy)
-$MQL5_VERSION = "{0:000}.{1:000}" -f $MAJOR, ($MINOR * 100 + $PATCH)
+# Format: Major sans padding, Minor*100+Patch avec 3 chiffres (ex: 27.500)
+$MQL5_VERSION = "{0}.{1:000}" -f $MAJOR, ($MINOR * 100 + $PATCH)
 Write-Info "Format MQL5 Market: $MQL5_VERSION"
 
 # Demander confirmation

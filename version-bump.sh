@@ -82,7 +82,8 @@ NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
 print_info "Nouvelle version: $NEW_VERSION"
 
 # Calculer format MQL5 Market (xxx.yyy)
-MQL5_VERSION=$(printf "%03d.%03d" $MAJOR $((MINOR * 100 + PATCH)))
+# Format: Major sans padding, Minor*100+Patch avec 3 chiffres (ex: 27.500)
+MQL5_VERSION=$(printf "%d.%03d" $MAJOR $((MINOR * 100 + PATCH)))
 print_info "Format MQL5 Market: $MQL5_VERSION"
 
 # Demander confirmation
