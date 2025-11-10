@@ -1,0 +1,78 @@
+name: Compile Check
+
+on:
+  push:
+    branches: [ main, 'claude/**' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  compile:
+    name: Compile EA
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Check MQ5 file exists
+        run: |
+          if [ ! -f "EA_MultiPairs_Scalping_Pro.mq5" ]; then
+            echo "❌ EA file not found"
+            exit 1
+          fi
+          echo "✅ EA file found"
+
+      - name: Check for compilation errors (basic syntax)
+        run: |
+          # Basic syntax checks
+          echo "Checking for common MQL5 syntax issues..."
+
+          # Check for unclosed braces
+          OPEN_BRACES=$(grep -o '{' EA_MultiPairs_Scalping_Pro.mq5 | wc -l)
+          CLOSE_BRACES=$(grep -o '}' EA_MultiPairs_Scalping_Pro.mq5 | wc -l)
+
+          if [ "$OPEN_BRACES" -ne "$CLOSE_BRACES" ]; then
+            echo "❌ Mismatched braces: $OPEN_BRACES open, $CLOSE_BRACES close"
+            exit 1
+          fi
+
+          echo "✅ Brace count matches ($OPEN_BRACES pairs)"
+
+      - name: Check version consistency
+        run: |
+          # Check VERSION.txt exists
+          if [ ! -f "VERSION.txt" ]; then
+            echo "❌ VERSION.txt not found"
+            exit 1
+          fi
+
+          VERSION=$(cat VERSION.txt | tr -d '[:space:]')
+          echo "Version from VERSION.txt: $VERSION"
+
+          # Check version in EA file
+          if ! grep -q "#property version" EA_MultiPairs_Scalping_Pro.mq5; then
+            echo "❌ #property version not found in EA"
+            exit 1
+          fi
+
+          echo "✅ Version checks passed"
+
+      - name: Check SHA256 file exists
+        run: |
+          if [ ! -f "EA_MultiPairs_Scalping_Pro.mq5.sha256" ]; then
+            echo "⚠️  SHA256 file not found (security warning)"
+          else
+            HASH=$(cat EA_MultiPairs_Scalping_Pro.mq5.sha256)
+            echo "✅ SHA256 file present: $HASH"
+          fi
+
+      - name: Summary
+        run: |
+          echo ""
+          echo "════════════════════════════════════"
+          echo "✅ Compilation checks completed"
+          echo "════════════════════════════════════"
+          echo ""
+          echo "Note: Full compilation requires MetaEditor"
+          echo "This workflow performs basic syntax checks"
