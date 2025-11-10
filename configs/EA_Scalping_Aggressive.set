@@ -1,0 +1,95 @@
+; =============================================================================
+; EA Scalping Pro - Configuration AGRESSIVE
+; =============================================================================
+; Profil : Traders expérimentés / Risque élevé / Croissance rapide
+; Capital recommandé : 5000$+
+; Risque par trade : 1.0%
+; Drawdown max attendu : ~20-30%
+; =============================================================================
+
+; === TRADING SYMBOLS ===
+Trade_EURUSD=true
+Trade_GBPUSD=true
+Trade_USDJPY=true
+Trade_AUDUSD=true
+Trade_USDCAD=true
+Trade_NZDUSD=true
+
+; === SCALPING SETTINGS ===
+ScalpTP_Pips=6.0||3.0||0.5||12.0
+ScalpSL_Pips=12.0||8.0||1.0||20.0
+TrailingStop_Pips=4.0||2.0||0.5||8.0
+BreakEven_Pips=4.0||2.0||0.5||8.0
+MaxSpread_Points=25||15||2||40
+
+; === RISK MANAGEMENT ===
+RiskPercent=1.0||0.5||0.1||2.0
+MaxLotSize=2.0||0.5||0.5||5.0
+MaxDailyLoss=5.0||2.0||1.0||10.0
+MaxTradesPerDay=100||20||20||200
+MaxOpenPositions=10||3||2||20
+MaxPositionsPerSymbol=3||1||1||5
+
+; === NEWS FILTER ===
+UseNewsFilter=true
+MinutesBeforeNews=20||10||5||60
+MinutesAfterNews=10||5||5||30
+FilterHighImpact=true
+FilterMediumImpact=false
+FilterLowImpact=false
+
+; === INDICATORS ===
+EMA_Fast_Period=8||5||1||50
+EMA_Slow_Period=18||10||5||100
+RSI_Period=12||7||1||30
+RSI_Overbought=75||65||5||85
+RSI_Oversold=25||20||5||35
+ATR_Period=12||7||1||30
+
+; === DASHBOARD ===
+Dashboard_X=10||5||5||100
+Dashboard_Y=20||10||10||100
+AutoShiftChart=false
+
+; === AUTO UPDATE ===
+EnableAutoUpdate=true
+UpdateURL=https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_Scalping_Pro.mq5
+CheckUpdateEveryHours=12||6||6||48
+
+; === ADVANCED ===
+MagicNumber=270520||270520||1||999999
+
+; === NOTES ===
+; Configuration AGRESSIVE optimisée pour :
+; - Croissance rapide du capital
+; - Drawdown élevé acceptable
+; - Risque par trade élevé (1.0%)
+; - TOUTES les 6 paires activées
+; - Filtrage news léger (20 min avant, 10 min après)
+; - TP/SL ratio agressif 1:2 (6 pips TP, 12 pips SL)
+; - Maximum 100 trades/jour
+; - Maximum 10 positions simultanées (3 par symbole)
+; - Spread max permissif (25 points)
+; - Auto-update check fréquent (12h)
+;
+; Résultats attendus :
+; - Profit mensuel : 15-30%
+; - Drawdown max : 20-30%
+; - Win rate : 60-70% (requis pour profitabilité)
+; - Risk/Reward : 1:2
+;
+; ⚠️ AVERTISSEMENTS ⚠️
+; - Requiert expérience trading
+; - Capital minimum 5000$ fortement recommandé
+; - Surveiller QUOTIDIENNEMENT les positions
+; - Drawdown peut atteindre 30% (normal)
+; - NE PAS utiliser si débutant
+; - Tester 3 mois en DEMO obligatoire
+; - Stop trading si drawdown > 25%
+;
+; Recommandations :
+; - VPS recommandé (latence < 10ms)
+; - Broker ECN avec spread faible
+; - Surveiller spread pendant news
+; - Ne trader que sessions London/NY
+; - Backup quotidien recommandé

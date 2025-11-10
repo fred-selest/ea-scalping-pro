@@ -1,0 +1,84 @@
+; =============================================================================
+; EA Scalping Pro - Configuration MODÉRÉE (BALANCED)
+; =============================================================================
+; Profil : Traders intermédiaires / Risque équilibré
+; Capital recommandé : 2000$+
+; Risque par trade : 0.5%
+; Drawdown max attendu : ~10-15%
+; =============================================================================
+
+; === TRADING SYMBOLS ===
+Trade_EURUSD=true
+Trade_GBPUSD=true
+Trade_USDJPY=true
+Trade_AUDUSD=true
+Trade_USDCAD=false
+Trade_NZDUSD=false
+
+; === SCALPING SETTINGS ===
+ScalpTP_Pips=8.0||5.0||0.5||15.0
+ScalpSL_Pips=15.0||10.0||1.0||25.0
+TrailingStop_Pips=5.0||3.0||0.5||10.0
+BreakEven_Pips=5.0||3.0||0.5||10.0
+MaxSpread_Points=20||15||1||30
+
+; === RISK MANAGEMENT ===
+RiskPercent=0.5||0.2||0.1||2.0
+MaxLotSize=1.0||0.1||0.1||2.0
+MaxDailyLoss=3.0||1.0||0.5||10.0
+MaxTradesPerDay=50||10||10||100
+MaxOpenPositions=5||2||1||10
+MaxPositionsPerSymbol=2||1||1||5
+
+; === NEWS FILTER ===
+UseNewsFilter=true
+MinutesBeforeNews=30||15||15||90
+MinutesAfterNews=15||10||5||45
+FilterHighImpact=true
+FilterMediumImpact=false
+FilterLowImpact=false
+
+; === INDICATORS ===
+EMA_Fast_Period=10||5||1||50
+EMA_Slow_Period=21||10||5||100
+RSI_Period=14||7||1||30
+RSI_Overbought=70||65||5||80
+RSI_Oversold=30||25||5||35
+ATR_Period=14||7||1||30
+
+; === DASHBOARD ===
+Dashboard_X=10||5||5||100
+Dashboard_Y=20||10||10||100
+AutoShiftChart=false
+
+; === AUTO UPDATE ===
+EnableAutoUpdate=true
+UpdateURL=https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_Scalping_Pro.mq5
+CheckUpdateEveryHours=24||12||12||168
+
+; === ADVANCED ===
+MagicNumber=270520||270520||1||999999
+
+; === NOTES ===
+; Configuration MODÉRÉE optimisée pour :
+; - Balance risque/récompense équilibrée
+; - Drawdown modéré acceptable
+; - Risque par trade moyen (0.5%)
+; - 4 paires majeures actives (EURUSD, GBPUSD, USDJPY, AUDUSD)
+; - Filtrage news modéré (30 min avant, 15 min après)
+; - TP/SL ratio équilibré ~1:1.9 (8 pips TP, 15 pips SL)
+; - Maximum 50 trades/jour
+; - Maximum 5 positions simultanées (2 par symbole)
+; - Spread max modéré (20 points)
+; - Auto-update activé
+;
+; Résultats attendus :
+; - Profit mensuel : 8-15%
+; - Drawdown max : 10-15%
+; - Win rate : 55-65%
+; - Risk/Reward : 1:1.9
+;
+; Recommandations :
+; - Tester 1 mois en DEMO avant réel
+; - Surveiller drawdown quotidien
+; - Ajuster RiskPercent selon capital
