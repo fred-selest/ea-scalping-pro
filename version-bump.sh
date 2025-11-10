@@ -168,10 +168,24 @@ mv "$TEMP_CHANGELOG.new" "$CHANGELOG_FILE"
 rm -f "$TEMP_CHANGELOG"
 print_success "CHANGELOG.md mis à jour"
 
-# 9. Commit Git
+# 9. Générer le hash SHA256 pour sécurité
+print_info "Génération du hash SHA256..."
+if [ -f "./generate-sha256.sh" ]; then
+    ./generate-sha256.sh
+    HASH_FILE="${EA_FILE}.sha256"
+else
+    print_warning "Script generate-sha256.sh introuvable"
+    HASH_FILE=""
+fi
+
+# 10. Commit Git
 print_info "Création du commit Git..."
 
-git add "$VERSION_FILE" "$EA_FILE" "$CHANGELOG_FILE"
+if [ -n "$HASH_FILE" ] && [ -f "$HASH_FILE" ]; then
+    git add "$VERSION_FILE" "$EA_FILE" "$CHANGELOG_FILE" "$HASH_FILE"
+else
+    git add "$VERSION_FILE" "$EA_FILE" "$CHANGELOG_FILE"
+fi
 
 COMMIT_MESSAGE="$BUMP_TYPE($NEW_VERSION): $DESCRIPTION
 
@@ -182,6 +196,7 @@ COMMIT_MESSAGE="$BUMP_TYPE($NEW_VERSION): $DESCRIPTION
 Fichiers modifiés:
 - VERSION.txt
 - EA_MultiPairs_Scalping_Pro.mq5
+- EA_MultiPairs_Scalping_Pro.mq5.sha256 (sécurité)
 - CHANGELOG.md"
 
 git commit -m "$COMMIT_MESSAGE"

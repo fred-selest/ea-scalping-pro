@@ -50,6 +50,20 @@
 #define DASHBOARD_WIDTH 380             // Dashboard width + margin for chart shift
 #define CHART_SHIFT_PERCENT 15          // Percentage of chart shift for dashboard space
 
+// Magic numbers extracted as constants
+#define WEBQUEST_TIMEOUT_MS 5000        // WebRequest timeout in milliseconds
+#define HOURS_TO_SECONDS 3600           // Conversion hours to seconds
+#define DASHBOARD_BG_WIDTH_PX 360       // Dashboard background width in pixels
+#define DASHBOARD_BG_HEIGHT_PX 300      // Dashboard background height in pixels
+#define DASHBOARD_TITLE_OFFSET_X 340    // Dashboard title X offset from right edge
+#define DASHBOARD_TEXT_OFFSET_X 345     // Dashboard text X offset from right edge
+#define MAX_TP_PIPS_LIMIT 100           // Maximum Take Profit in pips
+#define MAX_SL_PIPS_LIMIT 200           // Maximum Stop Loss in pips
+#define MIN_TP_PIPS_LIMIT 1.0           // Minimum realistic Take Profit in pips
+#define MIN_SL_PIPS_LIMIT 2.0           // Minimum realistic Stop Loss in pips
+#define RISK_WARNING_THRESHOLD 2.0      // Risk % threshold for warnings
+#define INDICATOR_CACHE_SECONDS 1       // Cache indicator values for N seconds
+
 // Logging levels
 enum LOG_LEVEL {
    LOG_DEBUG = 0,
@@ -346,13 +360,13 @@ bool ValidateInputParameters()
 {
    bool valid = true;
 
-   if(ScalpTP_Pips <= 0 || ScalpTP_Pips > 100) {
-      Log(LOG_ERROR, "ScalpTP_Pips doit être entre 0.1 et 100 (valeur: " + DoubleToString(ScalpTP_Pips) + ")");
+   if(ScalpTP_Pips < MIN_TP_PIPS_LIMIT || ScalpTP_Pips > MAX_TP_PIPS_LIMIT) {
+      Log(LOG_ERROR, "ScalpTP_Pips doit être entre " + DoubleToString(MIN_TP_PIPS_LIMIT) + " et " + IntegerToString(MAX_TP_PIPS_LIMIT) + " (valeur: " + DoubleToString(ScalpTP_Pips) + ")");
       valid = false;
    }
 
-   if(ScalpSL_Pips <= 0 || ScalpSL_Pips > 200) {
-      Log(LOG_ERROR, "ScalpSL_Pips doit être entre 0.1 et 200 (valeur: " + DoubleToString(ScalpSL_Pips) + ")");
+   if(ScalpSL_Pips < MIN_SL_PIPS_LIMIT || ScalpSL_Pips > MAX_SL_PIPS_LIMIT) {
+      Log(LOG_ERROR, "ScalpSL_Pips doit être entre " + DoubleToString(MIN_SL_PIPS_LIMIT) + " et " + IntegerToString(MAX_SL_PIPS_LIMIT) + " (valeur: " + DoubleToString(ScalpSL_Pips) + ")");
       valid = false;
    }
 
@@ -435,7 +449,7 @@ bool ValidateInputParameters()
       Log(LOG_WARN, "TP (" + DoubleToString(ScalpTP_Pips) + ") < SL (" + DoubleToString(ScalpSL_Pips) + ") - Ratio risque/rendement défavorable");
    }
 
-   if(RiskPercent > 2.0) {
+   if(RiskPercent > RISK_WARNING_THRESHOLD) {
       Log(LOG_WARN, "RiskPercent élevé (" + DoubleToString(RiskPercent) + "%) - Risque accru");
    }
 
@@ -551,7 +565,7 @@ void LoadNewsCalendar()
    string cookie = NULL, referer = NULL;
    char data[], result[];
    string headers;
-   int timeout = 5000;
+   int timeout = WEBQUEST_TIMEOUT_MS;
 
    Log(LOG_DEBUG, "📰 Téléchargement du calendrier économique...");
 
@@ -768,20 +782,36 @@ bool IsNewsTime(string symbol)
 //| ✅ v27.4 OPT: Mettre à jour cache indicateurs                   |
 //| Optimisation: Cache 1 seconde pour éviter recalculs            |
 //+------------------------------------------------------------------+
+//| ✅ REFACTOR: Fixed static array warnings - use temp dynamic arrays |
+//+------------------------------------------------------------------+
 void UpdateIndicatorCache(int idx)
 {
-   // Cache 1 seconde
-   if(TimeCurrent() - indicators_cache[idx].last_update < 1) return;
+   // Cache for INDICATOR_CACHE_SECONDS
+   if(TimeCurrent() - indicators_cache[idx].last_update < INDICATOR_CACHE_SECONDS) return;
 
-   ArraySetAsSeries(indicators_cache[idx].ema_fast, true);
-   ArraySetAsSeries(indicators_cache[idx].ema_slow, true);
-   ArraySetAsSeries(indicators_cache[idx].rsi, true);
-   ArraySetAsSeries(indicators_cache[idx].atr, true);
+   // Use temporary dynamic arrays for CopyBuffer (avoids static array warnings)
+   double temp_ema_fast[], temp_ema_slow[], temp_rsi[], temp_atr[];
 
-   CopyBuffer(indicators[idx].handle_ema_fast, 0, 0, 3, indicators_cache[idx].ema_fast);
-   CopyBuffer(indicators[idx].handle_ema_slow, 0, 0, 3, indicators_cache[idx].ema_slow);
-   CopyBuffer(indicators[idx].handle_rsi, 0, 0, 3, indicators_cache[idx].rsi);
-   CopyBuffer(indicators[idx].handle_atr, 0, 0, 2, indicators_cache[idx].atr);
+   ArraySetAsSeries(temp_ema_fast, true);
+   ArraySetAsSeries(temp_ema_slow, true);
+   ArraySetAsSeries(temp_rsi, true);
+   ArraySetAsSeries(temp_atr, true);
+
+   // Copy from indicators to temp arrays
+   if(CopyBuffer(indicators[idx].handle_ema_fast, 0, 0, 3, temp_ema_fast) != 3) return;
+   if(CopyBuffer(indicators[idx].handle_ema_slow, 0, 0, 3, temp_ema_slow) != 3) return;
+   if(CopyBuffer(indicators[idx].handle_rsi, 0, 0, 3, temp_rsi) != 3) return;
+   if(CopyBuffer(indicators[idx].handle_atr, 0, 0, 2, temp_atr) != 2) return;
+
+   // Copy from temp arrays to cache (static arrays)
+   for(int i = 0; i < 3; i++) {
+      indicators_cache[idx].ema_fast[i] = temp_ema_fast[i];
+      indicators_cache[idx].ema_slow[i] = temp_ema_slow[i];
+      indicators_cache[idx].rsi[i] = temp_rsi[i];
+   }
+   for(int i = 0; i < 2; i++) {
+      indicators_cache[idx].atr[i] = temp_atr[i];
+   }
 
    indicators_cache[idx].last_update = TimeCurrent();
 }
@@ -902,55 +932,52 @@ bool CanTrade(string symbol)
 }
 
 //+------------------------------------------------------------------+
-//| ✅ v27.4 OPT: Compter positions totales avec sortie anticipée  |
-//| Optimisation: Break dès que limite atteinte                    |
+//| ✅ REFACTOR: Helper function to count positions (DRY principle) |
+//| Avoids code duplication between GetTotalPositions and GetSymbolPositions |
 //+------------------------------------------------------------------+
-int GetTotalPositions()
+int CountPositions(string symbol_filter = "", int max_count = 0)
 {
    int count = 0;
    int total = PositionsTotal();
 
-   // ✅ v27.4: Sortie anticipée si limite déjà atteinte
+   // If max_count not specified, use a very high number
+   if(max_count == 0) max_count = 999999;
+
    for(int i = total - 1; i >= 0; i--) {
-      if(count >= MaxOpenPositions) {
-         break; // Sortie anticipée
-      }
+      // Early exit optimization
+      if(count >= max_count) break;
 
       ulong ticket = PositionGetTicket(i);
       if(!PositionSelectByTicket(ticket)) continue;
-      if(PositionGetInteger(POSITION_MAGIC) == MagicNumber) {
-         count++;
-      }
+
+      // Check magic number
+      if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+
+      // If symbol filter specified, check it
+      if(symbol_filter != "" && PositionGetString(POSITION_SYMBOL) != symbol_filter) continue;
+
+      count++;
    }
 
    return count;
 }
 
 //+------------------------------------------------------------------+
+//| ✅ v27.4 OPT: Compter positions totales avec sortie anticipée  |
+//| ✅ REFACTOR: Uses CountPositions helper (no duplication)       |
+//+------------------------------------------------------------------+
+int GetTotalPositions()
+{
+   return CountPositions("", MaxOpenPositions);
+}
+
+//+------------------------------------------------------------------+
 //| ✅ v27.4 OPT: Compter positions symbole avec sortie anticipée  |
-//| Optimisation: Break dès que limite atteinte                    |
+//| ✅ REFACTOR: Uses CountPositions helper (no duplication)       |
 //+------------------------------------------------------------------+
 int GetSymbolPositions(string symbol)
 {
-   int count = 0;
-   int total = PositionsTotal();
-
-   // ✅ v27.4: Sortie anticipée
-   for(int i = total - 1; i >= 0; i--) {
-      if(count >= MaxPositionsPerSymbol) {
-         break;
-      }
-
-      ulong ticket = PositionGetTicket(i);
-      if(!PositionSelectByTicket(ticket)) continue;
-
-      if(PositionGetInteger(POSITION_MAGIC) == MagicNumber &&
-         PositionGetString(POSITION_SYMBOL) == symbol) {
-         count++;
-      }
-   }
-
-   return count;
+   return CountPositions(symbol, MaxPositionsPerSymbol);
 }
 
 //+------------------------------------------------------------------+
@@ -992,7 +1019,17 @@ bool OpenPosition(string symbol, int direction)
    }
 
    if(!OrderSend(request, result)) {
-      Log(LOG_ERROR, "Échec OrderSend pour " + symbol + " - Code: " + IntegerToString(GetLastError()));
+      // ✅ REFACTOR: Enhanced error logging with full context
+      int err = GetLastError();
+      string detailed_error = "OrderSend FAILED for " + symbol +
+                             " | Direction: " + (direction > 0 ? "BUY" : "SELL") +
+                             " | Volume: " + DoubleToString(lot, 2) +
+                             " | Price: " + DoubleToString(price, digits) +
+                             " | SL: " + DoubleToString(request.sl, digits) +
+                             " | TP: " + DoubleToString(request.tp, digits) +
+                             " | Spread: " + IntegerToString((int)SymbolInfoInteger(symbol, SYMBOL_SPREAD)) + " pts" +
+                             " | Error: " + IntegerToString(err) + " (" + GetTradeErrorDescription(err) + ")";
+      Log(LOG_ERROR, detailed_error);
       return false;
    }
 
@@ -1000,12 +1037,19 @@ bool OpenPosition(string symbol, int direction)
       trades_today++;
       Log(LOG_INFO, "✅ " + symbol + " " + (direction > 0 ? "BUY" : "SELL") +
           " | Lot: " + DoubleToString(lot, 2) +
+          " | Price: " + DoubleToString(result.price, digits) +
           " | Ticket: " + IntegerToString(result.order));
       return true;
    } else {
-      string error_msg = "Échec ouverture " + symbol + " " + (direction > 0 ? "BUY" : "SELL") +
-                         " | Code: " + IntegerToString(result.retcode) +
-                         " | " + GetTradeErrorDescription(result.retcode);
+      // ✅ REFACTOR: Enhanced error logging with full context
+      string error_msg = "Position REJECTED: " + symbol + " " + (direction > 0 ? "BUY" : "SELL") +
+                         " | Volume: " + DoubleToString(lot, 2) +
+                         " | Price: " + DoubleToString(price, digits) +
+                         " | SL: " + DoubleToString(request.sl, digits) +
+                         " | TP: " + DoubleToString(request.tp, digits) +
+                         " | Retcode: " + IntegerToString(result.retcode) +
+                         " | " + GetTradeErrorDescription(result.retcode) +
+                         " | Broker Comment: " + result.comment;
       Log(LOG_ERROR, error_msg);
       return false;
    }
@@ -1247,8 +1291,8 @@ void CreateDashboard()
    ObjectCreate(0, "Dashboard_BG", OBJ_RECTANGLE_LABEL, 0, 0, 0);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_XDISTANCE, Dashboard_X);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_YDISTANCE, Dashboard_Y);
-   ObjectSetInteger(0, "Dashboard_BG", OBJPROP_XSIZE, 360);
-   ObjectSetInteger(0, "Dashboard_BG", OBJPROP_YSIZE, 300);
+   ObjectSetInteger(0, "Dashboard_BG", OBJPROP_XSIZE, DASHBOARD_BG_WIDTH_PX);
+   ObjectSetInteger(0, "Dashboard_BG", OBJPROP_YSIZE, DASHBOARD_BG_HEIGHT_PX);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_BGCOLOR, clrBlack);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_BORDER_TYPE, BORDER_FLAT);
    ObjectSetInteger(0, "Dashboard_BG", OBJPROP_CORNER, CORNER_RIGHT_UPPER);  // ✅ Changé pour droite
@@ -1258,7 +1302,7 @@ void CreateDashboard()
 
    // Titre - Positionné à droite
    ObjectCreate(0, "Dashboard_Title", OBJ_LABEL, 0, 0, 0);
-   ObjectSetInteger(0, "Dashboard_Title", OBJPROP_XDISTANCE, Dashboard_X + 340);  // Ajusté pour droite
+   ObjectSetInteger(0, "Dashboard_Title", OBJPROP_XDISTANCE, Dashboard_X + DASHBOARD_TITLE_OFFSET_X);
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_YDISTANCE, Dashboard_Y + 10);
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_COLOR, clrYellow);
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_FONTSIZE, 11);
@@ -1273,7 +1317,7 @@ void CreateDashboard()
    for(int i=0; i<14; i++) {
       string objName = "Dash_"+IntegerToString(i);
       ObjectCreate(0, objName, OBJ_LABEL, 0, 0, 0);
-      ObjectSetInteger(0, objName, OBJPROP_XDISTANCE, Dashboard_X + 345);  // Ajusté pour droite
+      ObjectSetInteger(0, objName, OBJPROP_XDISTANCE, Dashboard_X + DASHBOARD_TEXT_OFFSET_X);
       ObjectSetInteger(0, objName, OBJPROP_YDISTANCE, yPos + (i * lineHeight));
       ObjectSetInteger(0, objName, OBJPROP_COLOR, clrWhite);
       ObjectSetInteger(0, objName, OBJPROP_FONTSIZE, 9);
@@ -1367,7 +1411,7 @@ void UpdateDashboard()
 void OnTick()
 {
    // Vérifier mises à jour périodiquement
-   if(EnableAutoUpdate && TimeCurrent() - last_update_check > CheckUpdateEveryHours * 3600) {
+   if(EnableAutoUpdate && TimeCurrent() - last_update_check > CheckUpdateEveryHours * HOURS_TO_SECONDS) {
       CheckForUpdates();
    }
 
@@ -1411,7 +1455,7 @@ void CheckForUpdates()
 {
    if(!EnableAutoUpdate) return;
 
-   if(TimeCurrent() - last_update_check < CheckUpdateEveryHours * 3600) {
+   if(TimeCurrent() - last_update_check < CheckUpdateEveryHours * HOURS_TO_SECONDS) {
       return;
    }
 
@@ -1424,7 +1468,7 @@ void CheckForUpdates()
    string cookie = NULL, referer = NULL;
    char data[], result[];
    string headers;
-   int timeout = 5000;
+   int timeout = WEBQUEST_TIMEOUT_MS;
 
    int res = WebRequest("GET", version_url, cookie, referer, timeout, data, 0, result, headers);
 
@@ -1438,7 +1482,7 @@ void CheckForUpdates()
          Log(LOG_INFO, "✨ Mise à jour disponible : v" + latest_version + " (actuelle : v" + CURRENT_VERSION + ")");
          Log(LOG_INFO, "📥 Téléchargement automatique dans 5 secondes...");
 
-         Sleep(5000);
+         Sleep(WEBQUEST_TIMEOUT_MS);
          DownloadAndInstallUpdate();
       } else {
          Log(LOG_INFO, "✅ Vous utilisez la dernière version (v" + CURRENT_VERSION + ")");

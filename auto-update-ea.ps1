@@ -58,6 +58,36 @@ function Write-Info($message) { Write-ColorOutput Cyan "ℹ️ $message" }
 function Write-Warning($message) { Write-ColorOutput Yellow "⚠️ $message" }
 function Write-Error($message) { Write-ColorOutput Red "❌ $message" }
 
+# ✅ ROLLBACK: Function to restore previous version on failure
+function Invoke-Rollback {
+    param(
+        [string]$BackupFile,
+        [string]$TargetFile,
+        [string]$Reason
+    )
+
+    Write-Host ""
+    Write-Host "═══════════════════════════════════════" -ForegroundColor Red
+    Write-Error "ÉCHEC: $Reason"
+    Write-Host "═══════════════════════════════════════" -ForegroundColor Red
+
+    if (Test-Path $BackupFile) {
+        Write-Warning "Restauration de la version précédente..."
+        try {
+            Copy-Item -Path $BackupFile -Destination $TargetFile -Force
+            Write-Success "Rollback réussi - Version précédente restaurée"
+            Write-Info "Votre EA est revenu à l'état fonctionnel précédent"
+        } catch {
+            Write-Error "CRITIQUE: Impossible de restaurer le backup"
+            Write-Host "Backup manuel requis depuis: $BackupFile" -ForegroundColor Red
+        }
+    } else {
+        Write-Error "Aucun backup trouvé pour rollback"
+    }
+
+    exit 1
+}
+
 # Bannière
 Write-Host ""
 Write-Host "╔════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
@@ -217,6 +247,7 @@ Write-Info "Téléchargement de la nouvelle version depuis GitHub..."
 Write-Host "  URL: $sourceUrl" -ForegroundColor Gray
 
 try {
+    # Télécharger le fichier principal
     $response = Invoke-WebRequest -Uri $sourceUrl -UseBasicParsing -TimeoutSec 60
     $sourceCode = $response.Content
 
@@ -231,6 +262,35 @@ try {
 
     Write-Success "Téléchargement réussi ($([math]::Round($sourceCode.Length/1024, 2)) KB)"
 
+    # ✅ SECURITY: Vérifier l'intégrité avec SHA256
+    Write-Info "Vérification de l'intégrité (SHA256)..."
+    $hashUrl = $sourceUrl + ".sha256"
+
+    try {
+        $expectedHashResponse = Invoke-WebRequest -Uri $hashUrl -UseBasicParsing -TimeoutSec 10
+        $expectedHash = $expectedHashResponse.Content.Trim()
+
+        # Calculer le hash du fichier téléchargé
+        $stream = [System.IO.MemoryStream]::new([System.Text.Encoding]::UTF8.GetBytes($sourceCode))
+        $actualHash = (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash
+        $stream.Dispose()
+
+        if ($actualHash -eq $expectedHash) {
+            Write-Success "Vérification SHA256 réussie"
+            Write-Host "  Hash: $actualHash" -ForegroundColor Gray
+        } else {
+            throw "ERREUR DE SÉCURITÉ: Hash SHA256 ne correspond pas!`n  Attendu: $expectedHash`n  Reçu:    $actualHash"
+        }
+
+    } catch {
+        if ($_.Exception.Message -like "*404*") {
+            Write-Warning "Fichier SHA256 introuvable - Skip verification (non recommandé)"
+            Write-Host "  URL tentée: $hashUrl" -ForegroundColor Gray
+        } else {
+            throw "Échec vérification SHA256: $($_.Exception.Message)"
+        }
+    }
+
 } catch {
     Write-Error "Échec du téléchargement"
     Write-Host "Erreur: $($_.Exception.Message)" -ForegroundColor Red
@@ -243,9 +303,7 @@ try {
     Set-Content -Path $localFile -Value $sourceCode -Encoding UTF8 -Force
     Write-Success "Fichier installé : $filename"
 } catch {
-    Write-Error "Impossible d'écrire le fichier"
-    Write-Host "Erreur: $($_.Exception.Message)" -ForegroundColor Red
-    exit 1
+    Invoke-Rollback -BackupFile $backupFile -TargetFile $localFile -Reason "Impossible d'écrire le fichier: $($_.Exception.Message)"
 }
 
 # Compiler avec MetaEditor

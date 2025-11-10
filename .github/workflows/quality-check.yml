@@ -1,0 +1,224 @@
+name: Quality Check
+
+on:
+  push:
+    branches: [ main, 'claude/**' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  docs:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Check README exists
+        run: |
+          if [ ! -f "README.md" ]; then
+            echo "❌ README.md not found"
+            exit 1
+          fi
+          echo "✅ README.md exists"
+
+      - name: Check CHANGELOG exists
+        run: |
+          if [ ! -f "CHANGELOG.md" ]; then
+            echo "❌ CHANGELOG.md not found"
+            exit 1
+          fi
+          echo "✅ CHANGELOG.md exists"
+
+      - name: Check documentation files
+        run: |
+          MISSING_DOCS=0
+
+          # Check required docs
+          DOCS=(
+            "VERSIONING.md"
+            "VERSION_QUICKSTART.md"
+            "docs/TROUBLESHOOTING.md"
+            "docs/API.md"
+            "tests/README.md"
+          )
+
+          for doc in "${DOCS[@]}"; do
+            if [ -f "$doc" ]; then
+              echo "✅ $doc"
+            else
+              echo "❌ $doc missing"
+              MISSING_DOCS=$((MISSING_DOCS + 1))
+            fi
+          done
+
+          if [ $MISSING_DOCS -gt 0 ]; then
+            echo ""
+            echo "⚠️  $MISSING_DOCS documentation file(s) missing"
+          else
+            echo ""
+            echo "✅ All documentation files present"
+          fi
+
+  scripts:
+    name: Scripts Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Check versioning scripts
+        run: |
+          MISSING_SCRIPTS=0
+
+          SCRIPTS=(
+            "version-bump.sh"
+            "version-bump.ps1"
+            "archive-version.sh"
+            "generate-sha256.sh"
+          )
+
+          for script in "${SCRIPTS[@]}"; do
+            if [ -f "$script" ]; then
+              echo "✅ $script"
+
+              # Check if shell scripts are executable
+              if [[ "$script" == *.sh ]]; then
+                if [ -x "$script" ]; then
+                  echo "   ✅ Executable"
+                else
+                  echo "   ⚠️  Not executable"
+                fi
+              fi
+            else
+              echo "❌ $script missing"
+              MISSING_SCRIPTS=$((MISSING_SCRIPTS + 1))
+            fi
+          done
+
+          if [ $MISSING_SCRIPTS -gt 0 ]; then
+            echo ""
+            echo "❌ $MISSING_SCRIPTS script(s) missing"
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ All scripts present"
+
+      - name: Check script syntax (bash)
+        run: |
+          echo "Checking bash script syntax..."
+
+          for script in version-bump.sh archive-version.sh generate-sha256.sh; do
+            if bash -n "$script" 2>&1; then
+              echo "✅ $script: syntax OK"
+            else
+              echo "❌ $script: syntax error"
+              exit 1
+            fi
+          done
+
+  security:
+    name: Security Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Check SHA256 integrity file
+        run: |
+          if [ ! -f "EA_MultiPairs_Scalping_Pro.mq5.sha256" ]; then
+            echo "⚠️  WARNING: SHA256 file missing"
+            echo "Auto-update security verification will not work"
+            exit 1
+          fi
+
+          echo "✅ SHA256 file present"
+
+          # Validate hash format (64 hex characters)
+          HASH=$(cat EA_MultiPairs_Scalping_Pro.mq5.sha256 | tr -d '[:space:]')
+          if [[ ! "$HASH" =~ ^[a-fA-F0-9]{64}$ ]]; then
+            echo "❌ Invalid SHA256 hash format"
+            exit 1
+          fi
+
+          echo "✅ SHA256 hash format valid"
+
+      - name: Check for hardcoded secrets
+        run: |
+          echo "Checking for hardcoded secrets..."
+
+          # Check for common secret patterns
+          if grep -rn "password\s*=" EA_MultiPairs_Scalping_Pro.mq5 2>/dev/null; then
+            echo "⚠️  Found 'password=' pattern"
+          fi
+
+          if grep -rn "api_key\s*=" EA_MultiPairs_Scalping_Pro.mq5 2>/dev/null; then
+            echo "⚠️  Found 'api_key=' pattern"
+          fi
+
+          echo "✅ Basic secret check completed"
+
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Check for TODOs
+        run: |
+          echo "Checking for TODO comments..."
+
+          TODOS=$(grep -rn "TODO" EA_MultiPairs_Scalping_Pro.mq5 | wc -l)
+
+          if [ $TODOS -gt 0 ]; then
+            echo "⚠️  Found $TODOS TODO comment(s):"
+            grep -rn "TODO" EA_MultiPairs_Scalping_Pro.mq5
+          else
+            echo "✅ No TODO comments found"
+          fi
+
+      - name: Check file sizes
+        run: |
+          EA_SIZE=$(stat -f%z EA_MultiPairs_Scalping_Pro.mq5 2>/dev/null || stat -c%s EA_MultiPairs_Scalping_Pro.mq5)
+          EA_SIZE_KB=$((EA_SIZE / 1024))
+
+          echo "EA file size: ${EA_SIZE_KB}KB"
+
+          if [ $EA_SIZE_KB -gt 500 ]; then
+            echo "⚠️  EA file is large (> 500KB)"
+          else
+            echo "✅ EA file size OK"
+          fi
+
+      - name: Check line count
+        run: |
+          LINES=$(wc -l < EA_MultiPairs_Scalping_Pro.mq5)
+          echo "EA lines of code: $LINES"
+
+          if [ $LINES -gt 5000 ]; then
+            echo "⚠️  EA has many lines (> 5000)"
+            echo "Consider refactoring into modules"
+          else
+            echo "✅ Line count reasonable"
+          fi
+
+  summary:
+    name: Quality Summary
+    runs-on: ubuntu-latest
+    needs: [docs, scripts, security, code-quality]
+
+    steps:
+      - name: Summary
+        run: |
+          echo ""
+          echo "════════════════════════════════════"
+          echo "✅ Quality checks completed"
+          echo "════════════════════════════════════"
+          echo ""
+          echo "All quality gates passed!"
