@@ -31,10 +31,10 @@
 //|                                                                  |
 //| AUTEUR: fred-selest                                             |
 //| GITHUB: https://github.com/fred-selest/ea-scalping-pro         |
-//| VERSION: 27.52                                                   |
-//| DATE: 2025-11-09                                                
+//| VERSION: 27.53                                                   |
+//| DATE: 2025-11-10
 //+------------------------------------------------------------------+
-#property version   "27.520"
+#property version   "27.530"
 #property strict
 #property description "Multi-Symbol Scalping EA avec News Filter"
 #property description "Dashboard temps réel + ONNX + Correctifs Critiques v27.4"
@@ -54,7 +54,7 @@
 #define WEBQUEST_TIMEOUT_MS 5000        // WebRequest timeout in milliseconds
 #define HOURS_TO_SECONDS 3600           // Conversion hours to seconds
 #define DASHBOARD_BG_WIDTH_PX 360       // Dashboard background width in pixels
-#define DASHBOARD_BG_HEIGHT_PX 300      // Dashboard background height in pixels
+#define DASHBOARD_BG_HEIGHT_PX 350      // Dashboard background height in pixels (augmenté pour profit du jour)
 #define DASHBOARD_TITLE_OFFSET_X 340    // Dashboard title X offset from right edge
 #define DASHBOARD_TEXT_OFFSET_X 345     // Dashboard text X offset from right edge
 #define MAX_TP_PIPS_LIMIT 100           // Maximum Take Profit in pips
@@ -117,7 +117,7 @@ input string   ModelFileName = "scalping_model.onnx";
 // === DASHBOARD ===
 input group "=== DASHBOARD SETTINGS ==="
 input bool     ShowDashboard = true;        // Afficher dashboard
-input int      Dashboard_X = 20;            // Position X
+input int      Dashboard_X = 30;            // Position X (depuis bord droit)
 input int      Dashboard_Y = 30;            // Position Y
 input color    Dashboard_Color = clrWhite;  // Couleur texte
 input color    Dashboard_BG = clrNavy;      // Couleur fond
@@ -1411,14 +1411,14 @@ void CreateDashboard()
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_COLOR, clrYellow);
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_FONTSIZE, 11);
    ObjectSetString(0, "Dashboard_Title", OBJPROP_FONT, "Arial Black");
-   ObjectSetString(0, "Dashboard_Title", OBJPROP_TEXT, "EA SCALPING v27.52");
+   ObjectSetString(0, "Dashboard_Title", OBJPROP_TEXT, "EA SCALPING v27.53");
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_CORNER, CORNER_RIGHT_UPPER);  // ✅ Changé pour droite
 
    // Créer lignes de texte - Positionnées à droite
    int yPos = Dashboard_Y + 40;
    int lineHeight = 18;
 
-   for(int i=0; i<14; i++) {
+   for(int i=0; i<17; i++) {  // ✅ v27.53: Augmenté de 14 à 17 lignes (ajout profit du jour)
       string objName = "Dash_"+IntegerToString(i);
       ObjectCreate(0, objName, OBJ_LABEL, 0, 0, 0);
       ObjectSetInteger(0, objName, OBJPROP_XDISTANCE, Dashboard_X + DASHBOARD_TEXT_OFFSET_X);
@@ -1431,7 +1431,7 @@ void CreateDashboard()
    }
 
    ChartRedraw(0);
-   Log(LOG_INFO, "✅ Dashboard créé à droite (14 lignes)");
+   Log(LOG_INFO, "✅ Dashboard créé à droite (17 lignes - avec profit du jour)");
 }
 
 //+------------------------------------------------------------------+
@@ -1487,6 +1487,8 @@ void UpdateDashboard()
 
    string profit_sign = total_profit >= 0 ? "+" : "";
    string equity_sign = equity_pct >= 0 ? "+" : "";
+   string daily_sign = daily_profit >= 0 ? "+" : "";
+   color daily_color = daily_profit >= 0 ? clrLime : clrRed;
    long spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD);
 
    // Lignes du dashboard
@@ -1496,7 +1498,11 @@ void UpdateDashboard()
    ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("Balance: %.2f %s", balance, currency));
    ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("Equity : %.2f (%s%.1f%%)", equity, equity_sign, equity_pct));
    ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, "===========================");
-   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, "POSITIONS");
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, "PROFIT DU JOUR");
+   ObjectSetString(0, "Dash_"+IntegerToString(line), OBJPROP_TEXT, StringFormat("P&L 24h: %s%.2f %s", daily_sign, daily_profit, currency));
+   ObjectSetInteger(0, "Dash_"+IntegerToString(line++), OBJPROP_COLOR, daily_color);  // Vert si positif, rouge si négatif
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, "===========================");
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, "POSITIONS OUVERTES");
    ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("Total  : %d pos", total_pos));
    ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("P&L    : %s%.2f %s", profit_sign, total_profit, currency));
    ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, "===========================");
@@ -1504,7 +1510,7 @@ void UpdateDashboard()
    ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("Trades : %d/%d", trades_today, MaxTradesPerDay));
    ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("Spread : %d pts", spread));
    ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, "===========================");
-   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("v27.4 | News:%s | Pos:%d/%d", UseNewsFilter?"ON":"OFF", total_pos, MaxOpenPositions));
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("v27.53 | News:%s | Pos:%d/%d", UseNewsFilter?"ON":"OFF", total_pos, MaxOpenPositions));
 
    ChartRedraw(0);
 }
