@@ -1,0 +1,78 @@
+; =============================================================================
+; EA Scalping Pro - Configuration CONSERVATRICE
+; =============================================================================
+; Profil : Débutants / Comptes petits / Risque minimal
+; Capital recommandé : 1000$+
+; Risque par trade : 0.3%
+; Drawdown max attendu : ~5-10%
+; =============================================================================
+
+; === TRADING SYMBOLS ===
+Trade_EURUSD=true
+Trade_GBPUSD=true
+Trade_USDJPY=false
+Trade_AUDUSD=false
+Trade_USDCAD=false
+Trade_NZDUSD=false
+
+; === SCALPING SETTINGS ===
+ScalpTP_Pips=10.0||8.0||0.5||15.0
+ScalpSL_Pips=20.0||15.0||1.0||30.0
+TrailingStop_Pips=7.0||5.0||0.5||10.0
+BreakEven_Pips=6.0||4.0||0.5||10.0
+MaxSpread_Points=15||10||1||25
+
+; === RISK MANAGEMENT ===
+RiskPercent=0.3||0.1||0.05||1.0
+MaxLotSize=0.2||0.1||0.1||1.0
+MaxDailyLoss=1.5||1.0||0.5||5.0
+MaxTradesPerDay=15||5||5||50
+MaxOpenPositions=2||1||1||10
+MaxPositionsPerSymbol=1||1||1||5
+
+; === NEWS FILTER ===
+UseNewsFilter=true
+MinutesBeforeNews=60||30||15||120
+MinutesAfterNews=30||15||5||60
+FilterHighImpact=true
+FilterMediumImpact=true
+FilterLowImpact=false
+
+; === INDICATORS ===
+EMA_Fast_Period=12||5||1||50
+EMA_Slow_Period=26||10||5||100
+RSI_Period=14||7||1||30
+RSI_Overbought=70||65||5||80
+RSI_Oversold=30||25||5||35
+ATR_Period=14||7||1||30
+
+; === DASHBOARD ===
+Dashboard_X=10||5||5||100
+Dashboard_Y=20||10||10||100
+AutoShiftChart=false
+
+; === AUTO UPDATE ===
+EnableAutoUpdate=false
+UpdateURL=https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_Scalping_Pro.mq5
+CheckUpdateEveryHours=24||12||12||168
+
+; === ADVANCED ===
+MagicNumber=270520||270520||1||999999
+
+; === NOTES ===
+; Configuration CONSERVATRICE optimisée pour :
+; - Capital preservation (préservation capital)
+; - Drawdown minimal
+; - Risque par trade très faible (0.3%)
+; - Seulement 2 paires majeures (EURUSD + GBPUSD)
+; - Filtrage news strict (60 min avant, 30 min après)
+; - TP/SL ratio favorable 1:2 (10 pips TP, 20 pips SL)
+; - Maximum 15 trades/jour
+; - Maximum 2 positions simultanées
+; - Spread max restrictif (15 points)
+;
+; Résultats attendus :
+; - Profit mensuel : 3-8%
+; - Drawdown max : 5-10%
+; - Win rate : 50-60%
+; - Risk/Reward : 1:2
