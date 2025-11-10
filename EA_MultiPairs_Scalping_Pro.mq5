@@ -159,6 +159,19 @@ double daily_profit = 0;
 datetime current_day = 0;
 datetime last_daily_check = 0;  // ✅ v27.4: Nouveau - pour éviter checks répétitifs
 
+// ✅ FIX: Throttling pour modifications SL (éviter erreur 4756)
+#define MIN_SL_MODIFICATION_INTERVAL_SEC 5    // Délai minimum entre 2 modifications (5 secondes)
+#define MIN_SL_CHANGE_POINTS 5                 // Changement minimum pour modifier (5 points)
+
+struct LastModification {
+   ulong ticket;
+   datetime last_time;
+   double last_sl;
+};
+
+LastModification last_modifications[];
+int last_mod_count = 0;
+
 // === NEWS CALENDAR ===
 struct NewsEvent {
    datetime time;
@@ -1081,6 +1094,88 @@ double CalculateLotSize(string symbol)
 }
 
 //+------------------------------------------------------------------+
+//| ✅ FIX: Throttling - Vérifier si modification SL autorisée      |
+//| Évite erreur 4756 (modifications trop fréquentes)              |
+//+------------------------------------------------------------------+
+bool CanModifySL(ulong ticket, double new_sl, double point)
+{
+   datetime now = TimeCurrent();
+
+   // Chercher si on a déjà modifié ce ticket récemment
+   for(int i = 0; i < last_mod_count; i++) {
+      if(last_modifications[i].ticket == ticket) {
+         // Vérifier le délai minimum
+         if((now - last_modifications[i].last_time) < MIN_SL_MODIFICATION_INTERVAL_SEC) {
+            Log(LOG_DEBUG, "⏸️ Throttling: Ticket #" + IntegerToString(ticket) +
+                " - Dernière modif il y a " + IntegerToString(now - last_modifications[i].last_time) + "s");
+            return false;
+         }
+
+         // Vérifier le changement minimum
+         double sl_change_points = MathAbs(new_sl - last_modifications[i].last_sl) / point;
+         if(sl_change_points < MIN_SL_CHANGE_POINTS) {
+            Log(LOG_DEBUG, "⏸️ Throttling: Ticket #" + IntegerToString(ticket) +
+                " - Changement trop petit (" + DoubleToString(sl_change_points, 1) + " pts < " +
+                IntegerToString(MIN_SL_CHANGE_POINTS) + " pts)");
+            return false;
+         }
+
+         return true;
+      }
+   }
+
+   // Premier enregistrement pour ce ticket
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| ✅ FIX: Enregistrer modification SL                             |
+//+------------------------------------------------------------------+
+void RecordSLModification(ulong ticket, double new_sl)
+{
+   datetime now = TimeCurrent();
+   bool found = false;
+
+   // Mettre à jour si existe
+   for(int i = 0; i < last_mod_count; i++) {
+      if(last_modifications[i].ticket == ticket) {
+         last_modifications[i].last_time = now;
+         last_modifications[i].last_sl = new_sl;
+         found = true;
+         break;
+      }
+   }
+
+   // Ajouter nouveau si n'existe pas
+   if(!found) {
+      ArrayResize(last_modifications, last_mod_count + 1);
+      last_modifications[last_mod_count].ticket = ticket;
+      last_modifications[last_mod_count].last_time = now;
+      last_modifications[last_mod_count].last_sl = new_sl;
+      last_mod_count++;
+   }
+
+   // Nettoyer les vieux enregistrements (> 1 heure)
+   if(last_mod_count > 50) {
+      int cleaned = 0;
+      for(int i = last_mod_count - 1; i >= 0; i--) {
+         if((now - last_modifications[i].last_time) > 3600) {
+            // Supprimer cet élément
+            for(int j = i; j < last_mod_count - 1; j++) {
+               last_modifications[j] = last_modifications[j + 1];
+            }
+            last_mod_count--;
+            cleaned++;
+         }
+      }
+      if(cleaned > 0) {
+         ArrayResize(last_modifications, last_mod_count);
+         Log(LOG_DEBUG, "🧹 Nettoyage throttling: " + IntegerToString(cleaned) + " entrées supprimées");
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
 //| ✅ v27.4 FIX CRITIQUE: Gérer toutes les positions              |
 //| CORRECTION MAJEURE: Erreur 10036 "Stop Loss invalide"          |
 //|                                                                  |
@@ -1090,6 +1185,7 @@ double CalculateLotSize(string symbol)
 //|   3. Gestion correcte du spread pour ASK/BID                   |
 //|   4. Validation finale avant envoi                             |
 //|   5. Logs détaillés pour debugging                             |
+//|   6. ✅ FIX: Throttling modifications SL (éviter erreur 4756)  |
 //+------------------------------------------------------------------+
 void ManageAllPositions()
 {
@@ -1232,6 +1328,11 @@ void ManageAllPositions()
             continue; // Ne pas envoyer la requête
          }
 
+         // ✅ FIX: Vérification throttling (éviter erreur 4756)
+         if(!CanModifySL(ticket, new_sl, point)) {
+            continue; // Modification trop fréquente ou changement trop petit
+         }
+
          // Envoyer modification
          MqlTradeRequest request;
          MqlTradeResult result;
@@ -1253,6 +1354,9 @@ void ManageAllPositions()
                 " | " + DoubleToString(current_sl, digits) +
                 " → " + DoubleToString(new_sl, digits) +
                 " | Profit: " + DoubleToString(profit_pips, 1) + " pips");
+
+            // ✅ FIX: Enregistrer la modification (throttling)
+            RecordSLModification(ticket, new_sl);
          } else {
             // ✅ v27.4: Logs détaillés pour debugging erreur 10036
             Log(LOG_ERROR, "❌ Échec modification #" + IntegerToString(ticket) +
