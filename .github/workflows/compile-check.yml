@@ -28,9 +28,11 @@ jobs:
           # Basic syntax checks
           echo "Checking for common MQL5 syntax issues..."
 
-          # Check for unclosed braces
-          OPEN_BRACES=$(grep -o '{' EA_MultiPairs_Scalping_Pro.mq5 | wc -l)
-          CLOSE_BRACES=$(grep -o '}' EA_MultiPairs_Scalping_Pro.mq5 | wc -l)
+          # Check for unclosed braces (excluding string literals)
+          # Remove string literals first to avoid counting braces inside strings
+          CLEANED=$(sed 's/"[^"]*"/""/g' EA_MultiPairs_Scalping_Pro.mq5 | sed 's/\/\/.*$//g')
+          OPEN_BRACES=$(echo "$CLEANED" | grep -o '{' | wc -l)
+          CLOSE_BRACES=$(echo "$CLEANED" | grep -o '}' | wc -l)
 
           if [ "$OPEN_BRACES" -ne "$CLOSE_BRACES" ]; then
             echo "❌ Mismatched braces: $OPEN_BRACES open, $CLOSE_BRACES close"
