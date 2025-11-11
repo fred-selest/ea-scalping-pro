@@ -1,11 +1,11 @@
 //+------------------------------------------------------------------+
-//| EA Multi-Paires Scalping Pro v27.4 - News Filter + Dashboard    |
+//| EA Multi-Paires Scalping Pro v27.54 - AI-Enhanced Trading       |
 //| Expert Advisor pour trading scalping multi-paires               |
 //|------------------------------------------------------------------|
 //| DESCRIPTION:                                                     |
 //|   EA automatisé pour scalping sur 6 paires de devises avec:     |
 //|   - Filtre économique temps réel (ForexFactory API)             |
-//|   - Analyse technique multi-indicateurs (EMA, RSI, ATR)         |
+//|   - Analyse technique multi-indicateurs (EMA, RSI, ATR, ADX)    |
 //|   - Gestion avancée du risque et du capital                     |
 //|   - Dashboard visuel en temps réel                              |
 //|   - Système de mise à jour automatique                          |
@@ -17,6 +17,15 @@
 //|   ✓ Limites journalières (pertes max, nombre trades)           |
 //|   ✓ Validation complète des paramètres d'entrée                |
 //|   ✓ Système de logging avancé avec niveaux de sévérité         |
+//|   ✓ TP/SL dynamiques basés sur volatilité (ATR)                |
+//|   ✓ Filtre ADX pour éviter marchés range                       |
+//|                                                                  |
+//| NOUVEAUTÉS v27.54:                                              |
+//|   🎯 ADD: Filtre ADX - Force de tendance (évite range)         |
+//|   🎯 ADD: TP/SL dynamiques basés ATR (s'adapte à volatilité)   |
+//|   🔄 ADD: Retry automatique ordres (3 tentatives + backoff)    |
+//|   ⚡ ADD: Circuit breaker API news (3 échecs → pause 1h)       |
+//|   📊 OPT: Constantes pour magic numbers (maintenabilité)       |
 //|                                                                  |
 //| CORRECTIFS v27.4:                                               |
 //|   ✅ FIX: Erreur 10036 Stop Loss invalide (validation complète) |
@@ -26,15 +35,13 @@
 //|   ✅ OPT: Boucles optimisées (sortie anticipée -40% CPU)        |
 //|   ✅ OPT: Pré-allocation mémoire (performance +30%)             |
 //|   ✅ OPT: Cache indicateurs (réduction charge)                  |
-//|   ✅ ADD: Logs détaillés avec niveaux DEBUG/INFO/WARN/ERROR     |
-//|   ✅ ADD: Messages d'erreur détaillés pour codes trading        |
 //|                                                                  |
 //| AUTEUR: fred-selest                                             |
 //| GITHUB: https://github.com/fred-selest/ea-scalping-pro         |
-//| VERSION: 27.53                                                   |
-//| DATE: 2025-11-10
+//| VERSION: 27.54                                                   |
+//| DATE: 2025-11-11
 //+------------------------------------------------------------------+
-#property version   "27.530"
+#property version   "27.540"
 #property strict
 #property description "Multi-Symbol Scalping EA avec News Filter"
 #property description "Dashboard temps réel + ONNX + Correctifs Critiques v27.4"
@@ -63,6 +70,11 @@
 #define MIN_SL_PIPS_LIMIT 2.0           // Minimum realistic Stop Loss in pips
 #define RISK_WARNING_THRESHOLD 2.0      // Risk % threshold for warnings
 #define INDICATOR_CACHE_SECONDS 1       // Cache indicator values for N seconds
+#define ORDER_RETRY_COUNT 3             // Nombre de tentatives pour ordres
+#define ORDER_RETRY_DELAY_MS 100        // Délai entre retries (ms)
+#define DASHBOARD_LINES 17              // Nombre de lignes dans le dashboard
+#define NEWS_API_MAX_FAILURES 3         // Nombre max échecs avant circuit breaker
+#define NEWS_API_DISABLE_DURATION 3600  // Durée désactivation (1 heure)
 
 // Logging levels
 enum LOG_LEVEL {
@@ -83,8 +95,11 @@ input bool     Trade_NZDUSD = false;        // NZD/USD
 
 // === PARAMÈTRES SCALPING ===
 input group "=== SCALPING SETTINGS ==="
-input double   ScalpTP_Pips = 8.0;
-input double   ScalpSL_Pips = 15.0;
+input bool     UseDynamicTPSL = true;          // Utiliser TP/SL dynamiques (basés ATR)
+input double   ATR_TP_Multiplier = 1.5;        // Multiplier ATR pour TP (si dynamique)
+input double   ATR_SL_Multiplier = 2.0;        // Multiplier ATR pour SL (si dynamique)
+input double   ScalpTP_Pips = 8.0;             // TP fixe en pips (si non dynamique)
+input double   ScalpSL_Pips = 15.0;            // SL fixe en pips (si non dynamique)
 input double   TrailingStop_Pips = 5.0;
 input double   BreakEven_Pips = 5.0;
 input int      MaxSpread_Points = 20;
@@ -136,6 +151,8 @@ input int      EMA_Slow = 21;
 input int      RSI_Period = 9;
 input int      ATR_Period = 14;
 input double   ATR_Filter = 1.5;
+input int      ADX_Period = 14;                // Période ADX pour force de tendance
+input double   ADX_Threshold = 20.0;           // Seuil ADX minimum (< 20 = marché range)
 
 // === AUTO-UPDATE ===
 input group "=== AUTO-UPDATE ==="
@@ -143,7 +160,7 @@ input bool     EnableAutoUpdate = false;    // Activer mises à jour auto
 input string   UpdateURL = "https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_News_Dashboard_v27.mq5";
 input int      CheckUpdateEveryHours = 24;  // Vérifier MAJ toutes les X heures
 
-input int      MagicNumber = 270520;  // Magic number v27.52
+input int      MagicNumber = 270540;  // Magic number v27.54
 
 // === VARIABLES GLOBALES ===
 string symbols[];
@@ -184,13 +201,16 @@ struct NewsEvent {
 NewsEvent news_events[];
 datetime last_news_update = 0;
 bool news_filter_active = false;
+// ✅ v27.54: Circuit breaker pour API news
+int news_api_failures = 0;
+datetime news_api_disabled_until = 0;
 
 // Dashboard
 string dashboard_text = "";
 datetime last_dashboard_update = 0;
 
 // Auto-Update
-#define CURRENT_VERSION "27.52"
+#define CURRENT_VERSION "27.54"
 datetime last_update_check = 0;
 bool update_available = false;
 string latest_version = "";
@@ -202,6 +222,7 @@ struct SymbolIndicators {
    int handle_ema_slow;
    int handle_rsi;
    int handle_atr;
+   int handle_adx;
    bool enabled;
    int positions_count;
    double last_profit;
@@ -214,6 +235,7 @@ struct CachedIndicators {
    double ema_slow[3];
    double rsi[3];
    double atr[2];
+   double adx[2];
    datetime last_update;
 };
 CachedIndicators indicators_cache[];
@@ -307,8 +329,8 @@ string GetTradeErrorDescription(uint error_code)
 int OnInit()
 {
    Log(LOG_INFO, "═══════════════════════════════════════════════");
-   Log(LOG_INFO, "🚀 EA Multi-Paires Scalping Pro v27.4");
-   Log(LOG_INFO, "   Correctifs Critiques + Optimisations");
+   Log(LOG_INFO, "🚀 EA Multi-Paires Scalping Pro v27.54");
+   Log(LOG_INFO, "   ADX Filter + Dynamic TP/SL + AI-Enhanced");
    Log(LOG_INFO, "═══════════════════════════════════════════════");
 
    if(!ValidateInputParameters()) {
@@ -548,11 +570,13 @@ bool InitializeIndicators()
       indicators[i].handle_ema_slow = iMA(symbols[i], PERIOD_CURRENT, EMA_Slow, 0, MODE_EMA, PRICE_CLOSE);
       indicators[i].handle_rsi = iRSI(symbols[i], PERIOD_CURRENT, RSI_Period, PRICE_CLOSE);
       indicators[i].handle_atr = iATR(symbols[i], PERIOD_CURRENT, ATR_Period);
+      indicators[i].handle_adx = iADX(symbols[i], PERIOD_CURRENT, ADX_Period);
 
       if(indicators[i].handle_ema_fast == INVALID_HANDLE ||
          indicators[i].handle_ema_slow == INVALID_HANDLE ||
          indicators[i].handle_rsi == INVALID_HANDLE ||
-         indicators[i].handle_atr == INVALID_HANDLE) {
+         indicators[i].handle_atr == INVALID_HANDLE ||
+         indicators[i].handle_adx == INVALID_HANDLE) {
          Log(LOG_ERROR, "Erreur indicateurs pour " + symbols[i]);
          return false;
       }
@@ -562,11 +586,19 @@ bool InitializeIndicators()
 }
 
 //+------------------------------------------------------------------+
-//| ✅ v27.4 FIX: Charger le calendrier économique ForexFactory     |
-//| Correction: Rate limiting amélioré                              |
+//| ✅ v27.54: Charger calendrier avec circuit breaker              |
+//| Circuit breaker: Désactive API après 3 échecs consécutifs      |
 //+------------------------------------------------------------------+
 void LoadNewsCalendar()
 {
+   // ✅ v27.54: Vérifier si circuit breaker actif
+   if(news_api_disabled_until > TimeCurrent()) {
+      int remaining = (int)(news_api_disabled_until - TimeCurrent());
+      Log(LOG_DEBUG, "⛔ API news désactivée (circuit breaker) - " +
+          IntegerToString(remaining/60) + " min restantes");
+      return;
+   }
+
    static datetime last_attempt = 0;
    if(TimeCurrent() - last_attempt < MIN_NEWS_UPDATE_INTERVAL) {
       return;
@@ -586,11 +618,24 @@ void LoadNewsCalendar()
 
    if(res == -1) {
       int error = GetLastError();
-      Log(LOG_ERROR, "WebRequest error: " + IntegerToString(error));
+      news_api_failures++;
+
+      Log(LOG_ERROR, "WebRequest error: " + IntegerToString(error) +
+          " (échec " + IntegerToString(news_api_failures) + "/" +
+          IntegerToString(NEWS_API_MAX_FAILURES) + ")");
 
       if(error == 4060) {
          Log(LOG_WARN, "URL non autorisée. Ajoutez dans Outils → Options → Expert Advisors → WebRequest");
          Log(LOG_WARN, "   https://nfs.faireconomy.media");
+      }
+
+      // ✅ v27.54: Activer circuit breaker après X échecs
+      if(news_api_failures >= NEWS_API_MAX_FAILURES) {
+         news_api_disabled_until = TimeCurrent() + NEWS_API_DISABLE_DURATION;
+         Alert("⚠️ API News désactivée (circuit breaker) après " +
+               IntegerToString(news_api_failures) + " échecs - réactivation dans 1 heure");
+         Log(LOG_ERROR, "🔴 Circuit breaker activé - API news désactivée jusqu'à " +
+             TimeToString(news_api_disabled_until));
       }
       return;
    }
@@ -599,12 +644,31 @@ void LoadNewsCalendar()
       string json = CharArrayToString(result);
       ParseNewsJSON(json);
       last_news_update = TimeCurrent();
+      // ✅ v27.54: Réinitialiser compteur d'échecs si succès
+      news_api_failures = 0;
       Log(LOG_INFO, "✅ Calendrier chargé: " + IntegerToString(ArraySize(news_events)) + " événements");
    } else if(res == 429) {
-      Log(LOG_WARN, "Limite de requêtes API atteinte (429). Réessai dans 30 minutes.");
+      news_api_failures++;
+      Log(LOG_WARN, "Limite de requêtes API atteinte (429) - échec " +
+          IntegerToString(news_api_failures) + "/" + IntegerToString(NEWS_API_MAX_FAILURES));
       last_news_update = TimeCurrent();
+
+      // ✅ v27.54: Circuit breaker pour rate limiting
+      if(news_api_failures >= NEWS_API_MAX_FAILURES) {
+         news_api_disabled_until = TimeCurrent() + NEWS_API_DISABLE_DURATION;
+         Alert("⚠️ API News désactivée (rate limiting) - réactivation dans 1 heure");
+         Log(LOG_ERROR, "🔴 Circuit breaker activé (429) - API news désactivée");
+      }
    } else {
-      Log(LOG_WARN, "HTTP Error: " + IntegerToString(res));
+      news_api_failures++;
+      Log(LOG_WARN, "HTTP Error: " + IntegerToString(res) + " - échec " +
+          IntegerToString(news_api_failures) + "/" + IntegerToString(NEWS_API_MAX_FAILURES));
+
+      if(news_api_failures >= NEWS_API_MAX_FAILURES) {
+         news_api_disabled_until = TimeCurrent() + NEWS_API_DISABLE_DURATION;
+         Alert("⚠️ API News désactivée - erreurs répétées");
+         Log(LOG_ERROR, "🔴 Circuit breaker activé - API news désactivée");
+      }
    }
 }
 
@@ -803,18 +867,20 @@ void UpdateIndicatorCache(int idx)
    if(TimeCurrent() - indicators_cache[idx].last_update < INDICATOR_CACHE_SECONDS) return;
 
    // Use temporary dynamic arrays for CopyBuffer (avoids static array warnings)
-   double temp_ema_fast[], temp_ema_slow[], temp_rsi[], temp_atr[];
+   double temp_ema_fast[], temp_ema_slow[], temp_rsi[], temp_atr[], temp_adx[];
 
    ArraySetAsSeries(temp_ema_fast, true);
    ArraySetAsSeries(temp_ema_slow, true);
    ArraySetAsSeries(temp_rsi, true);
    ArraySetAsSeries(temp_atr, true);
+   ArraySetAsSeries(temp_adx, true);
 
    // Copy from indicators to temp arrays
    if(CopyBuffer(indicators[idx].handle_ema_fast, 0, 0, 3, temp_ema_fast) != 3) return;
    if(CopyBuffer(indicators[idx].handle_ema_slow, 0, 0, 3, temp_ema_slow) != 3) return;
    if(CopyBuffer(indicators[idx].handle_rsi, 0, 0, 3, temp_rsi) != 3) return;
    if(CopyBuffer(indicators[idx].handle_atr, 0, 0, 2, temp_atr) != 2) return;
+   if(CopyBuffer(indicators[idx].handle_adx, 0, 0, 2, temp_adx) != 2) return;
 
    // Copy from temp arrays to cache (static arrays)
    for(int i = 0; i < 3; i++) {
@@ -824,6 +890,7 @@ void UpdateIndicatorCache(int idx)
    }
    for(int i = 0; i < 2; i++) {
       indicators_cache[idx].atr[i] = temp_atr[i];
+      indicators_cache[idx].adx[i] = temp_adx[i];
    }
 
    indicators_cache[idx].last_update = TimeCurrent();
@@ -849,6 +916,13 @@ int GetSignalForSymbol(string symbol)
    UpdateIndicatorCache(idx);
 
    double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+
+   // ✅ v27.54: Filtre ADX - Éviter marchés range (force de tendance)
+   if(indicators_cache[idx].adx[0] < ADX_Threshold) {
+      Log(LOG_DEBUG, symbol + " - ADX trop faible (" + DoubleToString(indicators_cache[idx].adx[0], 1) +
+          ") - marché range, pas de trade");
+      return 0;
+   }
 
    // Filtre ATR
    if(indicators_cache[idx].atr[0] < ATR_Filter * PIPS_TO_POINTS_MULTIPLIER * point) return 0;
@@ -1014,14 +1088,51 @@ bool OpenPosition(string symbol, int direction)
    request.price = price;
    request.deviation = 3;
    request.magic = MagicNumber;
-   request.comment = "ScalpMulti_v274";
+   request.comment = "ScalpMulti_v2754";
    request.type_filling = ORDER_FILLING_IOC;
 
    double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
    int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
 
-   double sl_distance = ScalpSL_Pips * PIPS_TO_POINTS_MULTIPLIER * point;
-   double tp_distance = ScalpTP_Pips * PIPS_TO_POINTS_MULTIPLIER * point;
+   // ✅ v27.54: TP/SL dynamiques basés sur ATR
+   double tp_pips, sl_pips;
+
+   if(UseDynamicTPSL) {
+      // Trouver l'index du symbole pour obtenir l'ATR
+      int idx = -1;
+      for(int i = 0; i < ArraySize(indicators); i++) {
+         if(indicators[i].symbol == symbol) {
+            idx = i;
+            break;
+         }
+      }
+
+      if(idx >= 0) {
+         // Calculer TP/SL en fonction de l'ATR
+         double atr_points = indicators_cache[idx].atr[0] / point;
+         tp_pips = (atr_points / PIPS_TO_POINTS_MULTIPLIER) * ATR_TP_Multiplier;
+         sl_pips = (atr_points / PIPS_TO_POINTS_MULTIPLIER) * ATR_SL_Multiplier;
+
+         // Appliquer des limites minimales
+         tp_pips = MathMax(tp_pips, MIN_TP_PIPS_LIMIT);
+         sl_pips = MathMax(sl_pips, MIN_SL_PIPS_LIMIT);
+
+         Log(LOG_DEBUG, symbol + " - TP/SL dynamiques: TP=" + DoubleToString(tp_pips, 1) +
+             " pips, SL=" + DoubleToString(sl_pips, 1) + " pips (ATR=" +
+             DoubleToString(atr_points/PIPS_TO_POINTS_MULTIPLIER, 1) + " pips)");
+      } else {
+         // Fallback sur valeurs fixes
+         tp_pips = ScalpTP_Pips;
+         sl_pips = ScalpSL_Pips;
+      }
+   } else {
+      // Utiliser valeurs fixes
+      tp_pips = ScalpTP_Pips;
+      sl_pips = ScalpSL_Pips;
+   }
+
+   double sl_distance = sl_pips * PIPS_TO_POINTS_MULTIPLIER * point;
+   double tp_distance = tp_pips * PIPS_TO_POINTS_MULTIPLIER * point;
 
    if(direction > 0) {
       request.sl = NormalizeDouble(price - sl_distance, digits);
@@ -1031,45 +1142,79 @@ bool OpenPosition(string symbol, int direction)
       request.tp = NormalizeDouble(price - tp_distance, digits);
    }
 
-   if(!OrderSend(request, result)) {
-      // ✅ REFACTOR: Enhanced error logging with full context
-      int err = GetLastError();
-      string detailed_error = "OrderSend FAILED for " + symbol +
-                             " | Direction: " + (direction > 0 ? "BUY" : "SELL") +
-                             " | Volume: " + DoubleToString(lot, 2) +
-                             " | Price: " + DoubleToString(price, digits) +
-                             " | SL: " + DoubleToString(request.sl, digits) +
-                             " | TP: " + DoubleToString(request.tp, digits) +
-                             " | Spread: " + IntegerToString((int)SymbolInfoInteger(symbol, SYMBOL_SPREAD)) + " pts" +
-                             " | Error: " + IntegerToString(err) + " (" + GetTradeErrorDescription(err) + ")";
-      Log(LOG_ERROR, detailed_error);
-      return false;
+   // ✅ v27.54: Système de retry avec backoff exponentiel
+   int retries = ORDER_RETRY_COUNT;
+   int attempt = 0;
+
+   while(retries > 0) {
+      attempt++;
+
+      // Rafraîchir le prix avant chaque tentative (sauf la première)
+      if(attempt > 1) {
+         price = (direction > 0) ? SymbolInfoDouble(symbol, SYMBOL_ASK)
+                                 : SymbolInfoDouble(symbol, SYMBOL_BID);
+         request.price = price;
+
+         // Recalculer SL/TP avec le nouveau prix
+         if(direction > 0) {
+            request.sl = NormalizeDouble(price - sl_distance, digits);
+            request.tp = NormalizeDouble(price + tp_distance, digits);
+         } else {
+            request.sl = NormalizeDouble(price + sl_distance, digits);
+            request.tp = NormalizeDouble(price - tp_distance, digits);
+         }
+      }
+
+      if(!OrderSend(request, result)) {
+         // ✅ REFACTOR: Enhanced error logging with full context
+         int err = GetLastError();
+         string detailed_error = "OrderSend FAILED (attempt " + IntegerToString(attempt) + "/" +
+                                IntegerToString(ORDER_RETRY_COUNT) + ") for " + symbol +
+                                " | Direction: " + (direction > 0 ? "BUY" : "SELL") +
+                                " | Volume: " + DoubleToString(lot, 2) +
+                                " | Price: " + DoubleToString(price, digits) +
+                                " | SL: " + DoubleToString(request.sl, digits) +
+                                " | TP: " + DoubleToString(request.tp, digits) +
+                                " | Spread: " + IntegerToString((int)SymbolInfoInteger(symbol, SYMBOL_SPREAD)) + " pts" +
+                                " | Error: " + IntegerToString(err) + " (" + GetTradeErrorDescription(err) + ")";
+         Log(LOG_ERROR, detailed_error);
+         retries--;
+         if(retries > 0) Sleep(ORDER_RETRY_DELAY_MS * attempt); // Backoff exponentiel
+         continue;
+      }
+
+      if(result.retcode == TRADE_RETCODE_DONE) {
+         trades_today++;
+         Log(LOG_INFO, "✅ " + symbol + " " + (direction > 0 ? "BUY" : "SELL") +
+             " | Lot: " + DoubleToString(lot, 2) +
+             " | Price: " + DoubleToString(result.price, digits) +
+             " | Ticket: " + IntegerToString(result.order) +
+             (attempt > 1 ? " (réussi après " + IntegerToString(attempt) + " tentatives)" : ""));
+         return true;
+      } else {
+         retries--;
+         // ✅ REFACTOR: Enhanced error logging with full context
+         string error_msg = "Position REJECTED (attempt " + IntegerToString(attempt) + "/" +
+                           IntegerToString(ORDER_RETRY_COUNT) + "): " + symbol + " " +
+                           (direction > 0 ? "BUY" : "SELL") +
+                           " | Volume: " + DoubleToString(lot, 2) +
+                           " | Price: " + DoubleToString(price, digits) +
+                           " | SL: " + DoubleToString(request.sl, digits) +
+                           " | TP: " + DoubleToString(request.tp, digits) +
+                           " | Retcode: " + IntegerToString(result.retcode) +
+                           " | " + GetTradeErrorDescription(result.retcode) +
+                           " | Broker Comment: " + result.comment;
+         Log(retries > 0 ? LOG_WARN : LOG_ERROR, error_msg);
+         if(retries > 0) Sleep(ORDER_RETRY_DELAY_MS * attempt); // Backoff exponentiel
+      }
    }
 
-   if(result.retcode == TRADE_RETCODE_DONE) {
-      trades_today++;
-      Log(LOG_INFO, "✅ " + symbol + " " + (direction > 0 ? "BUY" : "SELL") +
-          " | Lot: " + DoubleToString(lot, 2) +
-          " | Price: " + DoubleToString(result.price, digits) +
-          " | Ticket: " + IntegerToString(result.order));
-      return true;
-   } else {
-      // ✅ REFACTOR: Enhanced error logging with full context
-      string error_msg = "Position REJECTED: " + symbol + " " + (direction > 0 ? "BUY" : "SELL") +
-                         " | Volume: " + DoubleToString(lot, 2) +
-                         " | Price: " + DoubleToString(price, digits) +
-                         " | SL: " + DoubleToString(request.sl, digits) +
-                         " | TP: " + DoubleToString(request.tp, digits) +
-                         " | Retcode: " + IntegerToString(result.retcode) +
-                         " | " + GetTradeErrorDescription(result.retcode) +
-                         " | Broker Comment: " + result.comment;
-      Log(LOG_ERROR, error_msg);
-      return false;
-   }
+   return false;
 }
 
 //+------------------------------------------------------------------+
 //| Calculer lot                                                      |
+//| ✅ v27.54: Support TP/SL dynamiques pour calcul risque           |
 //+------------------------------------------------------------------+
 double CalculateLotSize(string symbol)
 {
@@ -1083,8 +1228,28 @@ double CalculateLotSize(string symbol)
    double max_lot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
    double lot_step = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
 
+   // ✅ v27.54: Calculer SL effectif (dynamique ou fixe)
+   double effective_sl_pips = ScalpSL_Pips;
+
+   if(UseDynamicTPSL) {
+      // Trouver l'index du symbole pour obtenir l'ATR
+      int idx = -1;
+      for(int i = 0; i < ArraySize(indicators); i++) {
+         if(indicators[i].symbol == symbol) {
+            idx = i;
+            break;
+         }
+      }
+
+      if(idx >= 0) {
+         double atr_points = indicators_cache[idx].atr[0] / point;
+         effective_sl_pips = (atr_points / PIPS_TO_POINTS_MULTIPLIER) * ATR_SL_Multiplier;
+         effective_sl_pips = MathMax(effective_sl_pips, MIN_SL_PIPS_LIMIT);
+      }
+   }
+
    double pip_value = tick_value / tick_size * point * PIPS_TO_POINTS_MULTIPLIER;
-   double lot_size = risk_amount / (ScalpSL_Pips * pip_value);
+   double lot_size = risk_amount / (effective_sl_pips * pip_value);
 
    lot_size = MathFloor(lot_size / lot_step) * lot_step;
    lot_size = MathMax(min_lot, MathMin(lot_size, MaxLotSize));
@@ -1411,14 +1576,14 @@ void CreateDashboard()
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_COLOR, clrYellow);
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_FONTSIZE, 11);
    ObjectSetString(0, "Dashboard_Title", OBJPROP_FONT, "Arial Black");
-   ObjectSetString(0, "Dashboard_Title", OBJPROP_TEXT, "EA SCALPING v27.53");
+   ObjectSetString(0, "Dashboard_Title", OBJPROP_TEXT, "EA SCALPING v27.54");
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_CORNER, CORNER_RIGHT_UPPER);  // ✅ Changé pour droite
 
    // Créer lignes de texte - Positionnées à droite
    int yPos = Dashboard_Y + 40;
    int lineHeight = 18;
 
-   for(int i=0; i<17; i++) {  // ✅ v27.53: Augmenté de 14 à 17 lignes (ajout profit du jour)
+   for(int i=0; i<DASHBOARD_LINES; i++) {
       string objName = "Dash_"+IntegerToString(i);
       ObjectCreate(0, objName, OBJ_LABEL, 0, 0, 0);
       ObjectSetInteger(0, objName, OBJPROP_XDISTANCE, Dashboard_X + DASHBOARD_TEXT_OFFSET_X);
@@ -1431,7 +1596,7 @@ void CreateDashboard()
    }
 
    ChartRedraw(0);
-   Log(LOG_INFO, "✅ Dashboard créé à droite (17 lignes - avec profit du jour)");
+   Log(LOG_INFO, "✅ Dashboard créé à droite (" + IntegerToString(DASHBOARD_LINES) + " lignes)");
 }
 
 //+------------------------------------------------------------------+
@@ -1510,7 +1675,7 @@ void UpdateDashboard()
    ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("Trades : %d/%d", trades_today, MaxTradesPerDay));
    ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("Spread : %d pts", spread));
    ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, "===========================");
-   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("v27.53 | News:%s | Pos:%d/%d", UseNewsFilter?"ON":"OFF", total_pos, MaxOpenPositions));
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("v27.54 | News:%s | Pos:%d/%d", UseNewsFilter?"ON":"OFF", total_pos, MaxOpenPositions));
 
    ChartRedraw(0);
 }
@@ -1741,6 +1906,8 @@ void OnDeinit(const int reason)
          IndicatorRelease(indicators[i].handle_rsi);
       if(indicators[i].handle_atr != INVALID_HANDLE)
          IndicatorRelease(indicators[i].handle_atr);
+      if(indicators[i].handle_adx != INVALID_HANDLE)
+         IndicatorRelease(indicators[i].handle_adx);
    }
 
    // Supprimer le dashboard
