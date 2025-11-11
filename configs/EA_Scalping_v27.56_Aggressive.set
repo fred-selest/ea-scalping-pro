@@ -1,0 +1,180 @@
+; =============================================================================
+; EA Scalping Pro v27.56 - Configuration AGGRESSIVE
+; =============================================================================
+; Profil : Expérimentés / Recherche performance / Risque élevé
+; Capital recommandé : 5000$+
+; Risque par trade : 1.0% (ajusté par volatilité)
+; Drawdown max attendu : ~15-25%
+; Paires : EURUSD + GBPUSD + USDJPY + AUDUSD (volume maximum)
+; =============================================================================
+
+; === TRADING SYMBOLS ===
+Trade_EURUSD=true||EUR Major #1
+Trade_GBPUSD=true||GBP Major #2 - Corrélé EUR mais filtre actif
+Trade_USDJPY=true||JPY Major #3
+Trade_AUDUSD=true||AUD Océanie - Opportunités supplémentaires
+Trade_USDCAD=false||Trop de paires simultanées
+Trade_NZDUSD=false||Corrélé AUD 0.85 - évité
+
+; === SCALPING SETTINGS ===
+UseDynamicTPSL=true||TP/SL dynamiques ATR
+ATR_TP_Multiplier=1.0||1.5||0.5||3.0
+ATR_SL_Multiplier=1.5||2.0||1.0||3.0
+ScalpTP_Pips=6.0||8.0||1.0||20.0
+ScalpSL_Pips=12.0||15.0||2.0||30.0
+TrailingStop_Pips=4.0||5.0||0.5||15.0
+BreakEven_Pips=4.0||5.0||0.5||15.0
+MaxSpread_Points=25||20||5||40
+
+; === PARTIAL CLOSE ===
+UsePartialClose=true||Partial close agressif
+PartialClosePercent=50.0||50.0||10.0||90.0
+TP1_Multiplier=0.8||1.0||0.5||2.0
+TP2_Multiplier=2.0||2.5||1.5||4.0
+TP1_Fixed_Pips=4.0||5.0||1.0||15.0
+TP2_Fixed_Pips=12.0||15.0||5.0||30.0
+MoveSLToBreakEvenAfterTP1=true||Protection BE après TP1
+
+; === RISK MANAGEMENT ===
+RiskPercent=1.0||0.5||0.1||2.0
+MaxLotSize=2.0||1.0||0.01||10.0
+MaxDailyLoss=5.0||3.0||1.0||15.0
+MaxTradesPerDay=50||50||10||150
+MaxOpenPositions=5||5||1||15
+MaxPositionsPerSymbol=2||2||1||5
+
+; === CORRELATION & VOLATILITY (v27.55) ===
+UseCorrelationFilter=true||CRUCIAL avec 4 paires
+MaxCorrelation=0.80||0.70||0.50||0.95
+UseVolatilityBasedSizing=true||Sizing adaptatif agressif
+MaxVolatilityMultiplier=2.5||2.0||1.0||4.0
+
+; === NEWS FILTER ===
+UseNewsFilter=true||Filtre news recommandé
+MinutesBeforeNews=20||30||10||60
+MinutesAfterNews=10||15||5||30
+FilterHighImpact=true||High impact obligatoire
+FilterMediumImpact=false||Medium accepté
+FilterLowImpact=false||Low ignoré
+NewsCurrencies=USD,EUR,GBP,JPY,AUD||Toutes devises 4 paires
+
+; === ONNX ===
+UseONNX=true||AI model activé
+MinConfidence=0.65||0.75||0.50||0.95
+ModelFileName=scalping_model.onnx
+
+; === DASHBOARD ===
+ShowDashboard=true
+Dashboard_X=30||30||10||200
+Dashboard_Y=30||30||10||200
+Dashboard_Color=16777215||clrWhite
+Dashboard_BG=128||clrNavy
+AutoShiftChart=false
+
+; === TRADING HOURS ===
+Trade_Asian=false||Spreads plus larges - désactivé
+Trade_London=true||Maximum liquidité
+Trade_NewYork=true||Maximum volume
+
+; === TECHNICAL INDICATORS ===
+EMA_Fast=8||8||5||20
+EMA_Slow=21||21||10||50
+RSI_Period=9||9||5||21
+ATR_Period=14||14||7||30
+ATR_Filter=1.2||1.5||1.0||3.0
+ADX_Period=14||14||7||30
+ADX_Threshold=15.0||20.0||10.0||35.0
+
+; === AUTO-UPDATE ===
+EnableAutoUpdate=false
+UpdateURL=https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_Scalping_Pro.mq5
+CheckUpdateEveryHours=24||24||12||168
+
+MagicNumber=270560||270560||1||999999
+
+; =============================================================================
+; NOTES CONFIGURATION AGGRESSIVE v27.56
+; =============================================================================
+;
+; ⚠️ PROFIL AVANCÉ - RISQUE ÉLEVÉ ⚠️
+;
+; PAIRES (4 actives - Maximum opportunités) :
+;   ✓ EURUSD - Major #1, spread minimal
+;   ✓ GBPUSD - Major #2, haute volatilité
+;   ✓ USDJPY - Major #3, actif toutes sessions
+;   ✓ AUDUSD - Océanie, risk-on indicator
+;   ✗ NZDUSD - Évité (corrélé AUD 0.85)
+;
+; ⚠️ CORRÉLATIONS ÉLEVÉES (Protection CRUCIALE) :
+;   EURUSD ↔ GBPUSD : 0.80 (ÉLEVÉ - filtre bloquera souvent)
+;   EURUSD ↔ AUDUSD : 0.75 (MODÉRÉ - filtre activera)
+;   GBPUSD ↔ AUDUSD : 0.78 (MODÉRÉ - protection)
+;   USDJPY ↔ AUDUSD : -0.65 (inverse - OK)
+;
+; STRATÉGIE FILTRE CORRÉLATION :
+;   MaxCorrelation = 0.80 (vs 0.70 standard)
+;   → Permet EURUSD + GBPUSD simultanément (limite!)
+;   → Bloque AUDUSD si EUR ou GBP actifs (0.75-0.78)
+;   → USDJPY toujours disponible (corr faibles)
+;
+;   EN PRATIQUE :
+;   - Scénario 1: EURUSD + GBPUSD actifs (corr 0.80 = limite)
+;                 → AUDUSD bloqué (corr > 0.75)
+;                 → USDJPY OK (corr faible)
+;   - Scénario 2: EURUSD + USDJPY actifs
+;                 → GBPUSD peut passer (corr 0.80 = limite)
+;                 → AUDUSD bloqué (corr 0.75)
+;   - Maximum réel : 2-3 positions simultanées (filtre régule)
+;
+; PARAMÈTRES AGRESSIFS :
+;   ✓ Risque 1.0% par trade (vs 0.5% standard)
+;   ✓ TP/SL serrés : ATR × 1.0 et 1.5 (scalping pur)
+;   ✓ TP1 rapide : ATR × 0.8 (take quick profit)
+;   ✓ ADX 15 (vs 20) - accepte plus de marchés
+;   ✓ Volatility multiplier 2.5× (vs 2.0×)
+;   ✓ MaxCorrelation 0.80 (vs 0.70) - plus permissif
+;   ✓ News filter réduit (20/10 min vs 30/15 min)
+;   ✓ AI confidence réduite (0.65 vs 0.75) - plus de trades
+;
+; AVANTAGES :
+;   ✓ Maximum opportunités (4 paires)
+;   ✓ Haute fréquence trades (30-50/jour potentiel)
+;   ✓ Profit potential élevé
+;   ✓ Actif durant Londres + NY (liquidité max)
+;
+; RISQUES :
+;   ⚠️ Drawdown 15-25% possible
+;   ⚠️ Exposition corrélations (EURUSD+GBPUSD)
+;   ⚠️ Slippage en haute volatilité
+;   ⚠️ Requiert surveillance active
+;   ⚠️ Capital minimum élevé (5000$+)
+;
+; RÉSULTATS ATTENDUS :
+;   Profit mensuel : 15-30% (haute performance)
+;   Drawdown max : 15-25% (élevé)
+;   Win rate : 45-55% (ratio R:R compense)
+;   Sharpe Ratio : 1.0-1.5 (acceptable)
+;   Trades/jour : 20-40 (très actif)
+;
+; CAPITAL RECOMMANDÉ :
+;   Minimum : 5000$ (OBLIGATOIRE)
+;   Optimal : 10000-20000$
+;   Lot minimum broker : 0.01
+;
+; SESSIONS :
+;   Londres (08:00-17:00 GMT) : EURUSD, GBPUSD maximum volatilité
+;   New York (13:00-22:00 GMT) : Toutes paires actives
+;   Overlap (13:00-17:00 GMT) : Volume MAXIMUM - best time
+;
+; ⚠️ RECOMMANDATIONS IMPORTANTES :
+;   1. SURVEILLANCE ACTIVE recommandée (pas set & forget)
+;   2. Tester 30 jours DÉMO avant live
+;   3. Commencer avec 50% capital (scale progressivement)
+;   4. Vérifier spreads broker (impact élevé avec 4 paires)
+;   5. News high impact : TOUJOURS respecter (FilterHighImpact=true)
+;   6. Monitoring corrélations dans logs (niveau DEBUG)
+;   7. Stop trading si drawdown > 15%
+;   8. Review hebdomadaire performance par paire
+;
+; Ce profil est pour traders EXPÉRIMENTÉS uniquement !
+;

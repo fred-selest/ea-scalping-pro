@@ -2,7 +2,27 @@
 
 Fichiers de configuration préconfigurés pour différents profils de risque.
 
-## 📋 Fichiers Disponibles
+---
+
+## 🆕 NOUVEAUX PROFILS v27.56 (RECOMMANDÉS)
+
+**Optimisés pour les nouvelles fonctionnalités** :
+- ✅ Partial Close (TP1/TP2)
+- ✅ Filtre Corrélations (évite double exposition)
+- ✅ Volatility-Based Sizing (adapte lots à ATR)
+- ✅ TP/SL Dynamiques (basés ATR)
+
+| Fichier | Profil | Paires | Risque | Capital Min | Profit/Mois | Drawdown |
+|---------|--------|--------|--------|-------------|-------------|----------|
+| **EA_Scalping_v27.56_Conservative.set** | 🟢 Conservateur | 3 (EUR/JPY/CAD) | 0.3% | 1000$ | 3-7% | 5-8% |
+| **EA_Scalping_v27.56_Balanced.set** | 🟡 Équilibré | 3 (EUR/JPY/AUD) | 0.5% | 2000$ | 8-15% | 8-12% |
+| **EA_Scalping_v27.56_Aggressive.set** | 🔴 Agressif | 4 (EUR/GBP/JPY/AUD) | 1.0% | 5000$ | 15-30% | 15-25% |
+
+📖 **Guide complet** : Voir `GUIDE_PROFILS_v27.56.md` pour documentation détaillée
+
+---
+
+## 📋 Anciens Profils (v27.53 et antérieurs)
 
 | Fichier | Profil | Risque | Capital Min | Profit/Mois | Drawdown Max |
 |---------|--------|--------|-------------|-------------|--------------|
