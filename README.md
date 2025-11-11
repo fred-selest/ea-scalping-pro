@@ -1,9 +1,9 @@
-# 🤖 EA Multi-Paires Scalping Pro pour MT5
+#  EA Multi-Paires Scalping Pro pour MT5
 
 Expert Advisor automatisé pour trading scalping multi-paires avec filtre news ForexFactory, dashboard en temps réel, sécurité renforcée et optimisations performance.
 
-**Version actuelle** : 27.52
-**Dernière mise à jour** : 2025-11-10
+**Version actuelle** : 27.56
+**Dernière mise à jour** : 2025-11-11
 
 ---
 
