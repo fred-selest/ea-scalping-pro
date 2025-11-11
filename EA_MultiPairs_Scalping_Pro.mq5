@@ -1401,7 +1401,7 @@ bool PartialClosePosition(ulong ticket, double close_percent)
       }
 
       total_partial_closes++;
-      total_partial_profit += result.profit;
+      // Note: MqlTradeResult doesn't have profit member - profit calculated via account history
 
       Log(LOG_INFO, "✅ Partial Close: " + symbol + " #" + IntegerToString(ticket) +
           " | Fermé: " + DoubleToString(close_volume, 2) + "/" + DoubleToString(current_volume, 2) +
@@ -1891,7 +1891,7 @@ void ManageAllPositions()
                      }
 
                      if(distance_to_price >= min_stop_distance) {
-                        if(CanModifySL(ticket, new_sl)) {
+                        if(CanModifySL(ticket, new_sl, point)) {
                            MqlTradeRequest req;
                            MqlTradeResult res;
                            ZeroMemory(req);
@@ -1905,7 +1905,7 @@ void ManageAllPositions()
 
                            if(OrderSend(req, res) && res.retcode == TRADE_RETCODE_DONE) {
                               partially_closed[pc_idx].sl_moved_to_be = true;
-                              UpdateLastModification(ticket, new_sl);
+                              // Note: CanModifySL already updates last_modifications internally
                               Log(LOG_INFO, "✅ SL → BE après TP1: " + symbol + " #" + IntegerToString(ticket));
                            }
                         }
