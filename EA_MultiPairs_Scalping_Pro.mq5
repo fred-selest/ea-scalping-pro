@@ -1,5 +1,5 @@
 //+------------------------------------------------------------------+
-//| EA Multi-Paires Scalping Pro v27.55 - Smart Risk Management     |
+//| EA Multi-Paires Scalping Pro v27.56 - Smart Risk Management     |
 //| Expert Advisor pour trading scalping multi-paires               |
 //|------------------------------------------------------------------|
 //| DESCRIPTION:                                                     |
@@ -22,7 +22,7 @@
 //|   ✓ Gestion corrélations (évite double exposition)             |
 //|   ✓ Position sizing adaptatif selon volatilité                 |
 //|                                                                  |
-//| NOUVEAUTÉS v27.55:                                              |
+//| NOUVEAUTÉS v27.56:                                              |
 //|   🎯 ADD: Filtre corrélations - Évite double exposition         |
 //|   🎯 ADD: Position sizing volatilité - Adapte lots à ATR       |
 //|   📊 ADD: Cache ATR history - Calcul moyenne 20 périodes       |
@@ -38,10 +38,10 @@
 //|                                                                  |
 //| AUTEUR: fred-selest                                             |
 //| GITHUB: https://github.com/fred-selest/ea-scalping-pro         |
-//| VERSION: 27.55                                                   |
+//| VERSION: 27.56                                                   |
 //| DATE: 2025-11-11
 //+------------------------------------------------------------------+
-#property version   "27.550"
+#property version   "27.560"
 #property strict
 #property description "Multi-Symbol Scalping EA avec News Filter"
 #property description "Dashboard temps réel + ONNX + Correctifs Critiques v27.4"
@@ -104,6 +104,16 @@ input double   TrailingStop_Pips = 5.0;
 input double   BreakEven_Pips = 5.0;
 input int      MaxSpread_Points = 20;
 
+// === PARTIAL CLOSE ===
+input group "=== PARTIAL CLOSE SETTINGS ==="
+input bool     UsePartialClose = true;          // Activer fermeture partielle
+input double   PartialClosePercent = 50.0;      // % à fermer à TP1 (1-99)
+input double   TP1_Multiplier = 1.0;            // TP1 = ATR × multiplier (si dynamique)
+input double   TP2_Multiplier = 2.5;            // TP2 = ATR × multiplier (si dynamique)
+input double   TP1_Fixed_Pips = 5.0;            // TP1 fixe en pips (si non dynamique)
+input double   TP2_Fixed_Pips = 15.0;           // TP2 fixe en pips (si non dynamique)
+input bool     MoveSLToBreakEvenAfterTP1 = true; // Déplacer SL à BE après TP1
+
 // === GESTION DU RISQUE ===
 input group "=== RISK MANAGEMENT ==="
 input double   RiskPercent = 0.5;
@@ -164,7 +174,7 @@ input bool     EnableAutoUpdate = false;    // Activer mises à jour auto
 input string   UpdateURL = "https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_News_Dashboard_v27.mq5";
 input int      CheckUpdateEveryHours = 24;  // Vérifier MAJ toutes les X heures
 
-input int      MagicNumber = 270550;  // Magic number v27.55
+input int      MagicNumber = 270560;  // Magic number v27.56
 
 // === VARIABLES GLOBALES ===
 string symbols[];
@@ -193,6 +203,25 @@ struct LastModification {
 LastModification last_modifications[];
 int last_mod_count = 0;
 
+// ✅ v27.56: Partial Close - Tracker positions partiellement fermées
+struct PartiallyClosedPosition {
+   ulong ticket;
+   double initial_volume;      // Volume initial
+   double remaining_volume;    // Volume restant
+   double tp1_level;          // Niveau TP1
+   double tp2_level;          // Niveau TP2
+   bool tp1_reached;          // TP1 atteint ?
+   bool sl_moved_to_be;       // SL déplacé à BE ?
+   datetime tp1_time;         // Heure atteinte TP1
+};
+
+PartiallyClosedPosition partially_closed[];
+int partial_close_count = 0;
+
+// Statistiques partial close
+int total_partial_closes = 0;
+double total_partial_profit = 0;
+
 // === NEWS CALENDAR ===
 struct NewsEvent {
    datetime time;
@@ -214,7 +243,7 @@ string dashboard_text = "";
 datetime last_dashboard_update = 0;
 
 // Auto-Update
-#define CURRENT_VERSION "27.55"
+#define CURRENT_VERSION "27.56"
 datetime last_update_check = 0;
 bool update_available = false;
 string latest_version = "";
@@ -244,7 +273,7 @@ struct CachedIndicators {
 };
 CachedIndicators indicators_cache[];
 
-// ✅ v27.55: Gestion des corrélations entre paires
+// ✅ v27.56: Gestion des corrélations entre paires
 struct CorrelationPair {
    string symbol1;
    string symbol2;
@@ -275,7 +304,7 @@ CorrelationPair correlations[] = {
    {"USDCAD", "NZDUSD", -0.68}    // USD/CAD inverse avec NZD/USD
 };
 
-// ✅ v27.55: Cache ATR pour calcul volatilité moyenne
+// ✅ v27.56: Cache ATR pour calcul volatilité moyenne
 struct ATRHistory {
    string symbol;
    double atr_values[20];  // 20 dernières valeurs
@@ -373,7 +402,7 @@ string GetTradeErrorDescription(uint error_code)
 int OnInit()
 {
    Log(LOG_INFO, "═══════════════════════════════════════════════");
-   Log(LOG_INFO, "🚀 EA Multi-Paires Scalping Pro v27.55");
+   Log(LOG_INFO, "🚀 EA Multi-Paires Scalping Pro v27.56");
    Log(LOG_INFO, "   Smart Risk: Correlation + Volatility Sizing");
    Log(LOG_INFO, "═══════════════════════════════════════════════");
 
@@ -404,7 +433,7 @@ int OnInit()
       indicators_cache[i].last_update = 0;
    }
 
-   // ✅ v27.55: Initialiser cache ATR history
+   // ✅ v27.56: Initialiser cache ATR history
    ArrayResize(atr_history, symbol_count);
    for(int i = 0; i < symbol_count; i++) {
       atr_history[i].symbol = symbols[i];
@@ -1031,7 +1060,7 @@ void CheckDailyReset()
 }
 
 //+------------------------------------------------------------------+
-//| ✅ v27.55: Vérifier si position corrélée existe                 |
+//| ✅ v27.56: Vérifier si position corrélée existe                 |
 //| Évite double exposition sur paires corrélées                    |
 //+------------------------------------------------------------------+
 bool HasCorrelatedPosition(string symbol)
@@ -1065,7 +1094,7 @@ bool HasCorrelatedPosition(string symbol)
 }
 
 //+------------------------------------------------------------------+
-//| ✅ v27.55: Calculer ATR moyen sur N périodes                    |
+//| ✅ v27.56: Calculer ATR moyen sur N périodes                    |
 //| Utilisé pour position sizing basé sur volatilité                |
 //+------------------------------------------------------------------+
 double CalculateAverageATR(string symbol, int periods = 20)
@@ -1177,7 +1206,7 @@ bool CanTrade(string symbol)
    if(GetTotalPositions() >= MaxOpenPositions) return false;
    if(GetSymbolPositions(symbol) >= MaxPositionsPerSymbol) return false;
 
-   // ✅ v27.55: Vérifier corrélations
+   // ✅ v27.56: Vérifier corrélations
    if(HasCorrelatedPosition(symbol)) return false;
 
    return true;
@@ -1233,6 +1262,219 @@ int GetSymbolPositions(string symbol)
 }
 
 //+------------------------------------------------------------------+
+//| ✅ v27.56: Calculer niveaux TP1 et TP2 (dynamiques ou fixes)    |
+//+------------------------------------------------------------------+
+void CalculateTP1TP2Levels(string symbol, int direction, double &tp1_pips, double &tp2_pips)
+{
+   if(!UsePartialClose) {
+      // Si pas de partial close, utiliser TP standard
+      if(UseDynamicTPSL) {
+         int idx = -1;
+         for(int i = 0; i < ArraySize(indicators); i++) {
+            if(indicators[i].symbol == symbol) {
+               idx = i;
+               break;
+            }
+         }
+
+         if(idx >= 0) {
+            double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+            double atr_points = indicators_cache[idx].atr[0] / point;
+            tp1_pips = (atr_points / PIPS_TO_POINTS_MULTIPLIER) * ATR_TP_Multiplier;
+            tp2_pips = tp1_pips;  // Même niveau si pas de partial close
+         } else {
+            tp1_pips = ScalpTP_Pips;
+            tp2_pips = ScalpTP_Pips;
+         }
+      } else {
+         tp1_pips = ScalpTP_Pips;
+         tp2_pips = ScalpTP_Pips;
+      }
+      return;
+   }
+
+   // Avec partial close : calculer TP1 et TP2
+   if(UseDynamicTPSL) {
+      // TP1 et TP2 dynamiques basés sur ATR
+      int idx = -1;
+      for(int i = 0; i < ArraySize(indicators); i++) {
+         if(indicators[i].symbol == symbol) {
+            idx = i;
+            break;
+         }
+      }
+
+      if(idx >= 0) {
+         double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+         double atr_points = indicators_cache[idx].atr[0] / point;
+         tp1_pips = (atr_points / PIPS_TO_POINTS_MULTIPLIER) * TP1_Multiplier;
+         tp2_pips = (atr_points / PIPS_TO_POINTS_MULTIPLIER) * TP2_Multiplier;
+
+         // Limites minimales
+         tp1_pips = MathMax(tp1_pips, MIN_TP_PIPS_LIMIT);
+         tp2_pips = MathMax(tp2_pips, MIN_TP_PIPS_LIMIT);
+
+         Log(LOG_DEBUG, symbol + " - TP1/TP2 dynamiques: TP1=" + DoubleToString(tp1_pips, 1) +
+             " pips, TP2=" + DoubleToString(tp2_pips, 1) + " pips (ATR-based)");
+      } else {
+         tp1_pips = TP1_Fixed_Pips;
+         tp2_pips = TP2_Fixed_Pips;
+      }
+   } else {
+      // TP1 et TP2 fixes
+      tp1_pips = TP1_Fixed_Pips;
+      tp2_pips = TP2_Fixed_Pips;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| ✅ v27.56: Fermer partiellement une position                    |
+//+------------------------------------------------------------------+
+bool PartialClosePosition(ulong ticket, double close_percent)
+{
+   if(!PositionSelectByTicket(ticket)) {
+      Log(LOG_ERROR, "Partial Close: Position #" + IntegerToString(ticket) + " non trouvée");
+      return false;
+   }
+
+   string symbol = PositionGetString(POSITION_SYMBOL);
+   double current_volume = PositionGetDouble(POSITION_VOLUME);
+   double volume_step = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+   double min_volume = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+
+   // Calculer volume à fermer
+   double close_volume = current_volume * (close_percent / 100.0);
+
+   // Arrondir au lot step
+   close_volume = MathFloor(close_volume / volume_step) * volume_step;
+   close_volume = NormalizeDouble(close_volume, 2);
+
+   // Vérifier qu'on a assez de volume
+   double remaining_volume = current_volume - close_volume;
+
+   if(close_volume < min_volume) {
+      Log(LOG_WARN, "Partial Close: Volume trop petit (" + DoubleToString(close_volume, 2) + ")");
+      return false;
+   }
+
+   if(remaining_volume < min_volume) {
+      Log(LOG_WARN, "Partial Close: Volume restant trop petit, fermeture totale");
+      close_volume = current_volume;  // Fermer tout
+   }
+
+   // Préparer requête de fermeture partielle
+   MqlTradeRequest request;
+   MqlTradeResult result;
+   ZeroMemory(request);
+   ZeroMemory(result);
+
+   request.action = TRADE_ACTION_DEAL;
+   request.position = ticket;
+   request.symbol = symbol;
+   request.volume = close_volume;
+   request.deviation = 3;
+   request.magic = MagicNumber;
+   request.type = (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY) ? ORDER_TYPE_SELL : ORDER_TYPE_BUY;
+   request.price = (request.type == ORDER_TYPE_SELL) ? SymbolInfoDouble(symbol, SYMBOL_BID) : SymbolInfoDouble(symbol, SYMBOL_ASK);
+   request.type_filling = ORDER_FILLING_IOC;
+
+   if(!OrderSend(request, result)) {
+      int err = GetLastError();
+      Log(LOG_ERROR, "Partial Close FAILED: Ticket #" + IntegerToString(ticket) +
+          " | Volume: " + DoubleToString(close_volume, 2) +
+          " | Error: " + IntegerToString(err));
+      return false;
+   }
+
+   if(result.retcode == TRADE_RETCODE_DONE) {
+      // Calculer profit de la partie fermée
+      double close_price = result.price;
+      double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
+      int position_type = (int)PositionGetInteger(POSITION_TYPE);
+      double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+
+      double profit_pips = 0;
+      if(position_type == POSITION_TYPE_BUY) {
+         profit_pips = (close_price - open_price) / point / PIPS_TO_POINTS_MULTIPLIER;
+      } else {
+         profit_pips = (open_price - close_price) / point / PIPS_TO_POINTS_MULTIPLIER;
+      }
+
+      total_partial_closes++;
+      total_partial_profit += result.profit;
+
+      Log(LOG_INFO, "✅ Partial Close: " + symbol + " #" + IntegerToString(ticket) +
+          " | Fermé: " + DoubleToString(close_volume, 2) + "/" + DoubleToString(current_volume, 2) +
+          " lots (" + DoubleToString(close_percent, 0) + "%) " +
+          " | Profit: " + DoubleToString(profit_pips, 1) + " pips" +
+          " | Restant: " + DoubleToString(remaining_volume, 2) + " lots");
+
+      return true;
+   } else {
+      Log(LOG_ERROR, "Partial Close REJECTED: Retcode " + IntegerToString(result.retcode));
+      return false;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| ✅ v27.56: Trouver position dans tableau partial close          |
+//+------------------------------------------------------------------+
+int FindPartialPosition(ulong ticket)
+{
+   for(int i = 0; i < partial_close_count; i++) {
+      if(partially_closed[i].ticket == ticket) {
+         return i;
+      }
+   }
+   return -1;
+}
+
+//+------------------------------------------------------------------+
+//| ✅ v27.56: Ajouter position au tracker partial close            |
+//+------------------------------------------------------------------+
+void AddPartialPosition(ulong ticket, double initial_volume, double tp1_level, double tp2_level)
+{
+   int idx = FindPartialPosition(ticket);
+
+   if(idx >= 0) {
+      // Déjà existante, mettre à jour
+      partially_closed[idx].remaining_volume = initial_volume;
+      return;
+   }
+
+   // Ajouter nouvelle entrée
+   ArrayResize(partially_closed, partial_close_count + 1);
+
+   partially_closed[partial_close_count].ticket = ticket;
+   partially_closed[partial_close_count].initial_volume = initial_volume;
+   partially_closed[partial_close_count].remaining_volume = initial_volume;
+   partially_closed[partial_close_count].tp1_level = tp1_level;
+   partially_closed[partial_close_count].tp2_level = tp2_level;
+   partially_closed[partial_close_count].tp1_reached = false;
+   partially_closed[partial_close_count].sl_moved_to_be = false;
+   partially_closed[partial_close_count].tp1_time = 0;
+
+   partial_close_count++;
+}
+
+//+------------------------------------------------------------------+
+//| ✅ v27.56: Supprimer position du tracker                        |
+//+------------------------------------------------------------------+
+void RemovePartialPosition(ulong ticket)
+{
+   int idx = FindPartialPosition(ticket);
+   if(idx < 0) return;
+
+   // Décaler les éléments
+   for(int i = idx; i < partial_close_count - 1; i++) {
+      partially_closed[i] = partially_closed[i + 1];
+   }
+
+   partial_close_count--;
+   ArrayResize(partially_closed, partial_close_count);
+}
+
+//+------------------------------------------------------------------+
 //| Ouvrir position                                                   |
 //+------------------------------------------------------------------+
 bool OpenPosition(string symbol, int direction)
@@ -1259,11 +1501,12 @@ bool OpenPosition(string symbol, int direction)
    double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
    int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
 
-   // ✅ v27.54: TP/SL dynamiques basés sur ATR
-   double tp_pips, sl_pips;
+   // ✅ v27.56: Calculer TP1/TP2 et SL
+   double tp1_pips, tp2_pips, sl_pips;
+   CalculateTP1TP2Levels(symbol, direction, tp1_pips, tp2_pips);
 
+   // Calculer SL (inchangé)
    if(UseDynamicTPSL) {
-      // Trouver l'index du symbole pour obtenir l'ATR
       int idx = -1;
       for(int i = 0; i < ArraySize(indicators); i++) {
          if(indicators[i].symbol == symbol) {
@@ -1273,31 +1516,19 @@ bool OpenPosition(string symbol, int direction)
       }
 
       if(idx >= 0) {
-         // Calculer TP/SL en fonction de l'ATR
          double atr_points = indicators_cache[idx].atr[0] / point;
-         tp_pips = (atr_points / PIPS_TO_POINTS_MULTIPLIER) * ATR_TP_Multiplier;
          sl_pips = (atr_points / PIPS_TO_POINTS_MULTIPLIER) * ATR_SL_Multiplier;
-
-         // Appliquer des limites minimales
-         tp_pips = MathMax(tp_pips, MIN_TP_PIPS_LIMIT);
          sl_pips = MathMax(sl_pips, MIN_SL_PIPS_LIMIT);
-
-         Log(LOG_DEBUG, symbol + " - TP/SL dynamiques: TP=" + DoubleToString(tp_pips, 1) +
-             " pips, SL=" + DoubleToString(sl_pips, 1) + " pips (ATR=" +
-             DoubleToString(atr_points/PIPS_TO_POINTS_MULTIPLIER, 1) + " pips)");
       } else {
-         // Fallback sur valeurs fixes
-         tp_pips = ScalpTP_Pips;
          sl_pips = ScalpSL_Pips;
       }
    } else {
-      // Utiliser valeurs fixes
-      tp_pips = ScalpTP_Pips;
       sl_pips = ScalpSL_Pips;
    }
 
    double sl_distance = sl_pips * PIPS_TO_POINTS_MULTIPLIER * point;
-   double tp_distance = tp_pips * PIPS_TO_POINTS_MULTIPLIER * point;
+   // ✅ v27.56: Utiliser TP2 pour le TP initial (géré par partial close ensuite)
+   double tp_distance = tp2_pips * PIPS_TO_POINTS_MULTIPLIER * point;
 
    if(direction > 0) {
       request.sl = NormalizeDouble(price - sl_distance, digits);
@@ -1350,11 +1581,28 @@ bool OpenPosition(string symbol, int direction)
 
       if(result.retcode == TRADE_RETCODE_DONE) {
          trades_today++;
-         Log(LOG_INFO, "✅ " + symbol + " " + (direction > 0 ? "BUY" : "SELL") +
-             " | Lot: " + DoubleToString(lot, 2) +
-             " | Price: " + DoubleToString(result.price, digits) +
-             " | Ticket: " + IntegerToString(result.order) +
-             (attempt > 1 ? " (réussi après " + IntegerToString(attempt) + " tentatives)" : ""));
+
+         // ✅ v27.56: Ajouter au tracker partial close si activé
+         if(UsePartialClose) {
+            double tp1_price = (direction > 0) ? result.price + (tp1_pips * PIPS_TO_POINTS_MULTIPLIER * point)
+                                                : result.price - (tp1_pips * PIPS_TO_POINTS_MULTIPLIER * point);
+            double tp2_price = request.tp;
+
+            AddPartialPosition(result.order, lot, tp1_price, tp2_price);
+
+            Log(LOG_INFO, "✅ " + symbol + " " + (direction > 0 ? "BUY" : "SELL") +
+                " | Lot: " + DoubleToString(lot, 2) +
+                " | Price: " + DoubleToString(result.price, digits) +
+                " | Ticket: " + IntegerToString(result.order) +
+                " | TP1: " + DoubleToString(tp1_pips, 1) + " pips, TP2: " + DoubleToString(tp2_pips, 1) + " pips" +
+                (attempt > 1 ? " (réussi après " + IntegerToString(attempt) + " tentatives)" : ""));
+         } else {
+            Log(LOG_INFO, "✅ " + symbol + " " + (direction > 0 ? "BUY" : "SELL") +
+                " | Lot: " + DoubleToString(lot, 2) +
+                " | Price: " + DoubleToString(result.price, digits) +
+                " | Ticket: " + IntegerToString(result.order) +
+                (attempt > 1 ? " (réussi après " + IntegerToString(attempt) + " tentatives)" : ""));
+         }
          return true;
       } else {
          retries--;
@@ -1380,14 +1628,14 @@ bool OpenPosition(string symbol, int direction)
 //+------------------------------------------------------------------+
 //| Calculer lot                                                      |
 //| ✅ v27.54: Support TP/SL dynamiques pour calcul risque           |
-//| ✅ v27.55: Position sizing basé sur volatilité (ATR)             |
+//| ✅ v27.56: Position sizing basé sur volatilité (ATR)             |
 //+------------------------------------------------------------------+
 double CalculateLotSize(string symbol)
 {
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
    double base_risk_percent = RiskPercent;
 
-   // ✅ v27.55: Ajuster risque selon volatilité
+   // ✅ v27.56: Ajuster risque selon volatilité
    if(UseVolatilityBasedSizing) {
       // Calculer ratio de volatilité (ATR actuel vs moyenne)
       double current_atr = 0;
@@ -1602,6 +1850,73 @@ void ManageAllPositions()
       double new_sl = current_sl;
 
       //=================================================================
+      // ✅ v27.56: PARTIAL CLOSE LOGIC (AVANT break-even)
+      //=================================================================
+      if(UsePartialClose) {
+         int pc_idx = FindPartialPosition(ticket);
+
+         if(pc_idx >= 0 && !partially_closed[pc_idx].tp1_reached) {
+            // Position trackée et TP1 pas encore atteint
+            double tp1_price = partially_closed[pc_idx].tp1_level;
+            bool tp1_hit = false;
+
+            // Vérifier si TP1 atteint
+            if(type == POSITION_TYPE_BUY) {
+               tp1_hit = (current_price >= tp1_price);
+            } else {
+               tp1_hit = (current_price <= tp1_price);
+            }
+
+            if(tp1_hit) {
+               // TP1 atteint ! Fermer partiellement
+               Log(LOG_INFO, "🎯 TP1 atteint: " + symbol + " #" + IntegerToString(ticket) +
+                   " | Price: " + DoubleToString(current_price, digits) +
+                   " | TP1: " + DoubleToString(tp1_price, digits));
+
+               if(PartialClosePosition(ticket, PartialClosePercent)) {
+                  // Marquer TP1 comme atteint
+                  partially_closed[pc_idx].tp1_reached = true;
+                  partially_closed[pc_idx].tp1_time = TimeCurrent();
+
+                  // Déplacer SL à break-even si configuré
+                  if(MoveSLToBreakEvenAfterTP1 && !partially_closed[pc_idx].sl_moved_to_be) {
+                     new_sl = entry;
+
+                     // Vérifier distance minimale
+                     double distance_to_price = 0;
+                     if(type == POSITION_TYPE_BUY) {
+                        distance_to_price = current_price - new_sl;
+                     } else {
+                        distance_to_price = new_sl - current_price;
+                     }
+
+                     if(distance_to_price >= min_stop_distance) {
+                        if(CanModifySL(ticket, new_sl)) {
+                           MqlTradeRequest req;
+                           MqlTradeResult res;
+                           ZeroMemory(req);
+                           ZeroMemory(res);
+
+                           req.action = TRADE_ACTION_SLTP;
+                           req.position = ticket;
+                           req.symbol = symbol;
+                           req.sl = NormalizeDouble(new_sl, digits);
+                           req.tp = current_tp;
+
+                           if(OrderSend(req, res) && res.retcode == TRADE_RETCODE_DONE) {
+                              partially_closed[pc_idx].sl_moved_to_be = true;
+                              UpdateLastModification(ticket, new_sl);
+                              Log(LOG_INFO, "✅ SL → BE après TP1: " + symbol + " #" + IntegerToString(ticket));
+                           }
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      }
+
+      //=================================================================
       // BREAK-EVEN LOGIC
       //=================================================================
       if(profit_pips >= BreakEven_Pips && MathAbs(current_sl - entry) > point) {
@@ -1781,7 +2096,7 @@ void CreateDashboard()
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_COLOR, clrYellow);
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_FONTSIZE, 11);
    ObjectSetString(0, "Dashboard_Title", OBJPROP_FONT, "Arial Black");
-   ObjectSetString(0, "Dashboard_Title", OBJPROP_TEXT, "EA SCALPING v27.55");
+   ObjectSetString(0, "Dashboard_Title", OBJPROP_TEXT, "EA SCALPING v27.56");
    ObjectSetInteger(0, "Dashboard_Title", OBJPROP_CORNER, CORNER_RIGHT_UPPER);  // ✅ Changé pour droite
 
    // Créer lignes de texte - Positionnées à droite
@@ -1880,7 +2195,7 @@ void UpdateDashboard()
    ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("Trades : %d/%d", trades_today, MaxTradesPerDay));
    ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("Spread : %d pts", spread));
    ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, "===========================");
-   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("v27.55 | News:%s | Pos:%d/%d", UseNewsFilter?"ON":"OFF", total_pos, MaxOpenPositions));
+   ObjectSetString(0, "Dash_"+IntegerToString(line++), OBJPROP_TEXT, StringFormat("v27.56 | News:%s | Pos:%d/%d", UseNewsFilter?"ON":"OFF", total_pos, MaxOpenPositions));
 
    ChartRedraw(0);
 }
