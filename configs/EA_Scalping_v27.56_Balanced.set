@@ -1,0 +1,150 @@
+; =============================================================================
+; EA Scalping Pro v27.56 - Configuration BALANCED
+; =============================================================================
+; Profil : Intermédiaires / Équilibre risque/rendement
+; Capital recommandé : 2000$+
+; Risque par trade : 0.5% (ajusté par volatilité)
+; Drawdown max attendu : ~8-12%
+; Paires : EURUSD + USDJPY + AUDUSD (diversification géographique)
+; =============================================================================
+
+; === TRADING SYMBOLS ===
+Trade_EURUSD=true||EUR exposure - Major #1
+Trade_GBPUSD=false||Corrélé 0.80 avec EURUSD
+Trade_USDJPY=true||JPY exposure - Safe haven
+Trade_AUDUSD=true||AUD/Océanie - Risk-on indicator
+Trade_USDCAD=false||Redondant avec 3 paires actives
+Trade_NZDUSD=false||Trop corrélé AUDUSD (0.85)
+
+; === SCALPING SETTINGS ===
+UseDynamicTPSL=true||TP/SL dynamiques basés ATR
+ATR_TP_Multiplier=1.5||1.5||1.0||3.0
+ATR_SL_Multiplier=2.0||2.0||1.5||3.0
+ScalpTP_Pips=8.0||8.0||1.0||20.0
+ScalpSL_Pips=15.0||15.0||2.0||30.0
+TrailingStop_Pips=5.0||5.0||0.5||15.0
+BreakEven_Pips=5.0||5.0||0.5||15.0
+MaxSpread_Points=20||20||5||35
+
+; === PARTIAL CLOSE ===
+UsePartialClose=true||Fermeture partielle active
+PartialClosePercent=50.0||50.0||10.0||90.0
+TP1_Multiplier=1.0||1.0||0.5||2.0
+TP2_Multiplier=2.5||2.5||1.5||4.0
+TP1_Fixed_Pips=5.0||5.0||1.0||15.0
+TP2_Fixed_Pips=15.0||15.0||5.0||30.0
+MoveSLToBreakEvenAfterTP1=true||SL → BE après TP1
+
+; === RISK MANAGEMENT ===
+RiskPercent=0.5||0.5||0.1||2.0
+MaxLotSize=0.5||1.0||0.01||5.0
+MaxDailyLoss=3.0||3.0||1.0||10.0
+MaxTradesPerDay=30||50||10||100
+MaxOpenPositions=3||5||1||10
+MaxPositionsPerSymbol=2||2||1||5
+
+; === CORRELATION & VOLATILITY (v27.55) ===
+UseCorrelationFilter=true||Protection corrélation active
+MaxCorrelation=0.70||0.70||0.50||0.90
+UseVolatilityBasedSizing=true||Sizing adaptatif volatilité
+MaxVolatilityMultiplier=2.0||2.0||1.0||3.0
+
+; === NEWS FILTER ===
+UseNewsFilter=true||Filtre news actif
+MinutesBeforeNews=30||30||15||120
+MinutesAfterNews=15||15||5||60
+FilterHighImpact=true||News high impact
+FilterMediumImpact=true||News medium impact
+FilterLowImpact=false||News low impact ignorées
+NewsCurrencies=USD,EUR,JPY,AUD||Devises surveillées (4 paires)
+
+; === ONNX ===
+UseONNX=true||AI model activé
+MinConfidence=0.75||0.75||0.60||0.95
+ModelFileName=scalping_model.onnx
+
+; === DASHBOARD ===
+ShowDashboard=true
+Dashboard_X=30||30||10||200
+Dashboard_Y=30||30||10||200
+Dashboard_Color=16777215||clrWhite
+Dashboard_BG=128||clrNavy
+AutoShiftChart=false
+
+; === TRADING HOURS ===
+Trade_Asian=false||AUDUSD moins actif hors Asie
+Trade_London=true||Meilleure liquidité
+Trade_NewYork=true||Volume maximum
+
+; === TECHNICAL INDICATORS ===
+EMA_Fast=8||8||5||20
+EMA_Slow=21||21||10||50
+RSI_Period=9||9||5||21
+ATR_Period=14||14||7||30
+ATR_Filter=1.5||1.5||1.0||3.0
+ADX_Period=14||14||7||30
+ADX_Threshold=20.0||20.0||15.0||35.0
+
+; === AUTO-UPDATE ===
+EnableAutoUpdate=false
+UpdateURL=https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_Scalping_Pro.mq5
+CheckUpdateEveryHours=24||24||12||168
+
+MagicNumber=270560||270560||1||999999
+
+; =============================================================================
+; NOTES CONFIGURATION BALANCED v27.56
+; =============================================================================
+;
+; PAIRES OPTIMISÉES (Diversification Géographique) :
+;   ✓ EURUSD - Europe, spread minimal, liquidité max
+;   ✓ USDJPY - Asie/Safe haven, actif toutes sessions
+;   ✓ AUDUSD - Océanie, indicateur risk-on/off
+;   ✗ GBPUSD - Évité (corrélation EUR 0.80)
+;   ✗ NZDUSD - Évité (corrélation AUD 0.85)
+;
+; CORRÉLATIONS (Protection 0.70) :
+;   EURUSD ↔ USDJPY : ~0.15 (très faible - excellent)
+;   EURUSD ↔ AUDUSD : 0.75 (modéré - FILTRE BLOQUERA si simultané)
+;   USDJPY ↔ AUDUSD : -0.65 (INVERSE - excellente diversification!)
+;
+; STRATÉGIE CORRÉLATION :
+;   Si EURUSD en position → AUDUSD peut être bloqué (corr 0.75 > 0.70)
+;   USDJPY toujours disponible (corr faible avec EUR et inverse AUD)
+;   = Maximum 2 positions simultanées en pratique
+;
+; AVANTAGES RISK-ON/OFF :
+;   USDJPY ↔ AUDUSD inversement corrélés (-0.65)
+;   → Quand marchés risk-on : AUDUSD monte, USDJPY baisse
+;   → Quand marchés risk-off : USDJPY monte, AUDUSD baisse
+;   = Opportunités dans tous environnements de marché
+;
+; NOUVEAUTÉS v27.56 :
+;   ✓ Partial Close 50% à TP1 = ATR × 1.0
+;   ✓ TP2 = ATR × 2.5 (laisse courrir les winners)
+;   ✓ Filtre corrélation 0.70 (standard)
+;   ✓ Volatility sizing 2.0× (adaptatif)
+;   ✓ TP/SL dynamiques équilibrés (ATR × 1.5 et 2.0)
+;   ✓ ADX standard (20) - bon équilibre
+;   ✓ ONNX activé (AI predictions)
+;
+; RÉSULTATS ATTENDUS :
+;   Profit mensuel : 8-15% (bon potentiel)
+;   Drawdown max : 8-12% (acceptable)
+;   Win rate : 50-60%
+;   Sharpe Ratio : 1.3-1.8 (très bon)
+;   Trades/jour : 10-20 (équilibré)
+;
+; CAPITAL RECOMMANDÉ :
+;   Minimum : 2000$
+;   Optimal : 5000-10000$
+;   Lot minimum broker : 0.01
+;
+; SESSIONS OPTIMALES :
+;   Londres (08:00-17:00 GMT) : EURUSD très actif
+;   New York (13:00-22:00 GMT) : EURUSD, AUDUSD actifs
+;   Overlap (13:00-17:00 GMT) : Maximum liquidité
+;
+;   NOTE : AUDUSD moins actif hors session Asie/Sydney
+;          Mais reste tradable durant Londres/NY avec spreads OK
+;
