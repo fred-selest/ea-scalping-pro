@@ -7,6 +7,9 @@
 //|   - Clôture partielle des positions (TP1/TP2)                   |
 //|   - Throttling des modifications SL                             |
 //|   - Tracking des positions partiellement fermées                |
+//|                                                                  |
+//| NOTE: Les structures (LastModification, PartiallyClosedPosition)|
+//|       et variables sont définies dans le fichier principal      |
 //+------------------------------------------------------------------+
 #property copyright "fred-selest"
 #property link      "https://github.com/fred-selest/ea-scalping-pro"
@@ -17,43 +20,6 @@
 // === CONSTANTES POSITION MANAGEMENT ===
 #define MIN_SL_MODIFICATION_INTERVAL_SEC 5    // Délai minimum entre 2 modifications (5 secondes)
 #define MIN_SL_CHANGE_POINTS 5                 // Changement minimum pour modifier (5 points)
-
-// === STRUCTURES POSITIONS ===
-
-// Structure pour throttling des modifications SL
-struct LastModification {
-   ulong ticket;
-   datetime last_time;
-   double last_sl;
-};
-
-// ✅ v27.56: Partial Close - Tracker positions partiellement fermées
-struct PartiallyClosedPosition {
-   ulong ticket;
-   double initial_volume;      // Volume initial
-   double remaining_volume;    // Volume restant
-   double tp1_level;          // Niveau TP1
-   double tp2_level;          // Niveau TP2
-   bool tp1_reached;          // TP1 atteint ?
-   bool sl_moved_to_be;       // SL déplacé à BE ?
-   datetime tp1_time;         // Heure atteinte TP1
-};
-
-// === VARIABLES GLOBALES (déclarées dans le fichier principal) ===
-extern LastModification last_modifications[];
-extern int last_mod_count;
-extern PartiallyClosedPosition partially_closed[];
-extern int partial_close_count;
-extern int total_partial_closes;
-extern double total_partial_profit;
-
-// Paramètres (définis dans le fichier principal)
-extern bool UsePartialClose;
-extern double PartialClosePercent;
-extern bool MoveSLToBreakEvenAfterTP1;
-extern double TrailingStop_Pips;
-extern double BreakEven_Pips;
-extern int MagicNumber;
 
 //+------------------------------------------------------------------+
 //| ✅ FIX: Throttling - Vérifier si modification SL autorisée      |
