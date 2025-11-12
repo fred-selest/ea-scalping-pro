@@ -116,14 +116,7 @@ struct ATRHistory {
    datetime last_update;
 };
 
-// === MODULE INCLUDES ===
-#include "includes/Utils.mqh"
-#include "includes/Indicators.mqh"
-#include "includes/NewsFilter.mqh"
-#include "includes/RiskManagement.mqh"
-#include "includes/PositionManager.mqh"
-
-// === CONSTANTS ===
+// === CONSTANTS (doivent être AVANT les includes) ===
 #define DASHBOARD_UPDATE_INTERVAL 2     // Update dashboard every 2 seconds
 #define MIN_JSON_FILE_SIZE 1000         // Minimum expected file size for downloaded updates
 #define SECONDS_PER_DAY 86400           // Seconds in a day for calculations
@@ -143,6 +136,14 @@ struct ATRHistory {
 #define ORDER_RETRY_COUNT 3             // Nombre de tentatives pour ordres
 #define ORDER_RETRY_DELAY_MS 100        // Délai entre retries (ms)
 #define DASHBOARD_LINES 17              // Nombre de lignes dans le dashboard
+#define CURRENT_VERSION "27.56"         // Version actuelle
+
+// === MODULE INCLUDES ===
+#include "includes/Utils.mqh"
+#include "includes/Indicators.mqh"
+#include "includes/NewsFilter.mqh"
+#include "includes/RiskManagement.mqh"
+#include "includes/PositionManager.mqh"
 
 
 // === SYMBOLES À TRADER ===
@@ -274,8 +275,7 @@ datetime news_api_disabled_until = 0;
 string dashboard_text = "";
 datetime last_dashboard_update = 0;
 
-// Auto-Update
-#define CURRENT_VERSION "27.56"
+// Auto-Update (CURRENT_VERSION défini dans la section constantes ligne 139)
 datetime last_update_check = 0;
 bool update_available = false;
 string latest_version = "";
