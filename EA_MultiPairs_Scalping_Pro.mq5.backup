@@ -47,14 +47,10 @@
 #property description "Dashboard temps réel + ONNX + Correctifs Critiques v27.4"
 #property description "Performance: -40% CPU | Stabilité: +200%"
 
-// === MODULE INCLUDES ===
-#include "includes/Utils.mqh"
-#include "includes/Indicators.mqh"
-#include "includes/NewsFilter.mqh"
-#include "includes/RiskManagement.mqh"
-#include "includes/PositionManager.mqh"
-
 // === CONSTANTS ===
+#define PIPS_TO_POINTS_MULTIPLIER 10    // Conversion pips to points (10 for 4/5 digit brokers)
+#define MIN_NEWS_UPDATE_INTERVAL 300    // Minimum 5 minutes between news API calls
+#define NEWS_RELOAD_INTERVAL 21600      // Reload news every 6 hours
 #define DASHBOARD_UPDATE_INTERVAL 2     // Update dashboard every 2 seconds
 #define MIN_JSON_FILE_SIZE 1000         // Minimum expected file size for downloaded updates
 #define SECONDS_PER_DAY 86400           // Seconds in a day for calculations
@@ -62,6 +58,8 @@
 #define CHART_SHIFT_PERCENT 15          // Percentage of chart shift for dashboard space
 
 // Magic numbers extracted as constants
+#define WEBQUEST_TIMEOUT_MS 5000        // WebRequest timeout in milliseconds
+#define HOURS_TO_SECONDS 3600           // Conversion hours to seconds
 #define DASHBOARD_BG_WIDTH_PX 360       // Dashboard background width in pixels
 #define DASHBOARD_BG_HEIGHT_PX 350      // Dashboard background height in pixels (augmenté pour profit du jour)
 #define DASHBOARD_TITLE_OFFSET_X 340    // Dashboard title X offset from right edge
@@ -71,10 +69,20 @@
 #define MIN_TP_PIPS_LIMIT 1.0           // Minimum realistic Take Profit in pips
 #define MIN_SL_PIPS_LIMIT 2.0           // Minimum realistic Stop Loss in pips
 #define RISK_WARNING_THRESHOLD 2.0      // Risk % threshold for warnings
+#define INDICATOR_CACHE_SECONDS 1       // Cache indicator values for N seconds
 #define ORDER_RETRY_COUNT 3             // Nombre de tentatives pour ordres
 #define ORDER_RETRY_DELAY_MS 100        // Délai entre retries (ms)
 #define DASHBOARD_LINES 17              // Nombre de lignes dans le dashboard
+#define NEWS_API_MAX_FAILURES 3         // Nombre max échecs avant circuit breaker
+#define NEWS_API_DISABLE_DURATION 3600  // Durée désactivation (1 heure)
 
+// Logging levels
+enum LOG_LEVEL {
+   LOG_DEBUG = 0,
+   LOG_INFO = 1,
+   LOG_WARN = 2,
+   LOG_ERROR = 3
+};
 
 // === SYMBOLES À TRADER ===
 input group "=== TRADING SYMBOLS ==="
@@ -182,6 +190,9 @@ double daily_profit = 0;
 datetime current_day = 0;
 datetime last_daily_check = 0;  // ✅ v27.4: Nouveau - pour éviter checks répétitifs
 
+// ✅ FIX: Throttling pour modifications SL (éviter erreur 4756)
+#define MIN_SL_MODIFICATION_INTERVAL_SEC 5    // Délai minimum entre 2 modifications (5 secondes)
+#define MIN_SL_CHANGE_POINTS 5                 // Changement minimum pour modifier (5 points)
 
 struct LastModification {
    ulong ticket;
@@ -302,7 +313,88 @@ struct ATRHistory {
 };
 ATRHistory atr_history[];
 
+//+------------------------------------------------------------------+
+//| Fonction de logging avec niveaux de sévérité                    |
+//| ✅ v27.4: Inchangé - fonctionne bien                            |
+//+------------------------------------------------------------------+
+void Log(LOG_LEVEL level, string message)
+{
+   if(level < MinLogLevel) return;
 
+   string prefix = "";
+   switch(level) {
+      case LOG_DEBUG: prefix = "🔍 DEBUG: "; break;
+      case LOG_INFO:  prefix = "ℹ️ INFO: "; break;
+      case LOG_WARN:  prefix = "⚠️ WARN: "; break;
+      case LOG_ERROR: prefix = "❌ ERROR: "; break;
+   }
+
+   string full_message = prefix + message;
+   Print(full_message);
+
+   if(EnableFileLogging) {
+      int file = FileOpen("EA_Scalping_v274_Log_" + IntegerToString(MagicNumber) + ".txt",
+                          FILE_WRITE|FILE_READ|FILE_TXT|FILE_COMMON);
+      if(file != INVALID_HANDLE) {
+         FileSeek(file, 0, SEEK_END);
+         FileWrite(file, TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + " | " + full_message);
+         FileClose(file);
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Obtenir description détaillée d'un code d'erreur trading        |
+//| ✅ v27.4: Inchangé - mapping complet des erreurs               |
+//+------------------------------------------------------------------+
+string GetTradeErrorDescription(uint error_code)
+{
+   switch(error_code) {
+      case 10004: return "Serveur de trading occupé - Réessayer";
+      case 10006: return "Requête rejetée - Commande invalide";
+      case 10007: return "Requête annulée par le trader";
+      case 10008: return "Commande déjà placée";
+      case 10009: return "Commande envoyée - En attente confirmation";
+      case 10010: return "Requête acceptée";
+      case 10011: return "Requête en cours de traitement";
+      case 10012: return "Uniquement ordres en attente autorisés";
+      case 10013: return "Ouverture uniquement de positions longues autorisée";
+      case 10014: return "Ouverture uniquement de positions courtes autorisée";
+      case 10015: return "Clôture uniquement autorisée";
+      case 10016: return "Clôture position uniquement par position opposée";
+      case 10017: return "Clôture position uniquement par ordre de clôture";
+      case 10018: return "Nombre de positions ouvertes limite atteinte";
+      case 10019: return "Volume de transactions limité atteint";
+      case 10020: return "Nombre d'ordres en attente limite atteint";
+      case 10021: return "Volume d'ordres limité atteint";
+      case 10022: return "Ordre invalide (Stop Loss/Take Profit)";
+      case 10023: return "Ordre invalide (proche du marché)";
+      case 10024: return "Requête non valide - Aucun changement";
+      case 10025: return "Système d'auto-trading désactivé";
+      case 10026: return "Système d'auto-trading désactivé côté serveur";
+      case 10027: return "Requête verrouillée pour traitement";
+      case 10028: return "Position/Ordre gelé(e)";
+      case 10029: return "Type de remplissage d'ordre non supporté";
+      case 10030: return "Pas de connexion au serveur de trading";
+      case 10031: return "Uniquement comptes réels autorisés";
+      case 10032: return "Limite d'ordres en attente atteinte";
+      case 10033: return "Volume d'ordres et positions atteint la limite";
+      case 10034: return "Format ou paramètres d'ordre incorrects";
+      case 10035: return "Prix d'ordre invalide";
+      case 10036: return "Prix Stop Loss invalide";
+      case 10037: return "Prix Take Profit invalide";
+      case 10038: return "Volume invalide dans la requête";
+      case 10039: return "Prix marché inexistant";
+      case 10040: return "Symbole non disponible";
+      case 10041: return "Symbole désactivé";
+      case 10042: return "Validité de l'ordre expirée";
+      case 10043: return "Date d'expiration ordre invalide";
+      case 10044: return "Position avec ticket spécifié introuvable";
+      case 10045: return "Ordre avec ticket spécifié introuvable";
+      case 10046: return "Échec du trade - Pas de connexion";
+      default: return "Erreur inconnue: " + IntegerToString(error_code);
+   }
+}
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                    |
@@ -484,6 +576,27 @@ bool ValidateInputParameters()
    return valid;
 }
 
+//+------------------------------------------------------------------+
+//| Ajouter les URLs autorisées pour WebRequest                      |
+//+------------------------------------------------------------------+
+bool AddWebRequestURL()
+{
+   string urls[] = {
+      "https://nfs.faireconomy.media",
+      "https://cdn-nfs.faireconomy.media",
+      "https://www.forexfactory.com"
+   };
+
+   Log(LOG_INFO, "📡 Configuration WebRequest nécessaire :");
+   Log(LOG_INFO, "   Outils → Options → Expert Advisors → WebRequest");
+   Log(LOG_INFO, "   Ajouter les URLs suivantes :");
+
+   for(int i = 0; i < ArraySize(urls); i++) {
+      Log(LOG_INFO, "   - " + urls[i]);
+   }
+
+   return true;
+}
 
 //+------------------------------------------------------------------+
 //| Construire la liste des symboles à trader                        |
@@ -521,13 +634,348 @@ void PrintSymbolList()
    Log(LOG_INFO, list);
 }
 
+//+------------------------------------------------------------------+
+//| Initialiser les indicateurs pour tous les symboles              |
+//+------------------------------------------------------------------+
+bool InitializeIndicators()
+{
+   ArrayResize(indicators, symbol_count);
 
+   for(int i = 0; i < symbol_count; i++) {
+      indicators[i].symbol = symbols[i];
+      indicators[i].enabled = true;
+      indicators[i].positions_count = 0;
+      indicators[i].last_profit = 0;
 
+      indicators[i].handle_ema_fast = iMA(symbols[i], PERIOD_CURRENT, EMA_Fast, 0, MODE_EMA, PRICE_CLOSE);
+      indicators[i].handle_ema_slow = iMA(symbols[i], PERIOD_CURRENT, EMA_Slow, 0, MODE_EMA, PRICE_CLOSE);
+      indicators[i].handle_rsi = iRSI(symbols[i], PERIOD_CURRENT, RSI_Period, PRICE_CLOSE);
+      indicators[i].handle_atr = iATR(symbols[i], PERIOD_CURRENT, ATR_Period);
+      indicators[i].handle_adx = iADX(symbols[i], PERIOD_CURRENT, ADX_Period);
 
+      if(indicators[i].handle_ema_fast == INVALID_HANDLE ||
+         indicators[i].handle_ema_slow == INVALID_HANDLE ||
+         indicators[i].handle_rsi == INVALID_HANDLE ||
+         indicators[i].handle_atr == INVALID_HANDLE ||
+         indicators[i].handle_adx == INVALID_HANDLE) {
+         Log(LOG_ERROR, "Erreur indicateurs pour " + symbols[i]);
+         return false;
+      }
+   }
 
+   return true;
+}
 
+//+------------------------------------------------------------------+
+//| ✅ v27.54: Charger calendrier avec circuit breaker              |
+//| Circuit breaker: Désactive API après 3 échecs consécutifs      |
+//+------------------------------------------------------------------+
+void LoadNewsCalendar()
+{
+   // ✅ v27.54: Vérifier si circuit breaker actif
+   if(news_api_disabled_until > TimeCurrent()) {
+      int remaining = (int)(news_api_disabled_until - TimeCurrent());
+      Log(LOG_DEBUG, "⛔ API news désactivée (circuit breaker) - " +
+          IntegerToString(remaining/60) + " min restantes");
+      return;
+   }
 
+   static datetime last_attempt = 0;
+   if(TimeCurrent() - last_attempt < MIN_NEWS_UPDATE_INTERVAL) {
+      return;
+   }
+   last_attempt = TimeCurrent();
 
+   string url = "https://nfs.faireconomy.media/ff_calendar_thisweek.json";
+
+   string cookie = NULL, referer = NULL;
+   char data[], result[];
+   string headers;
+   int timeout = WEBQUEST_TIMEOUT_MS;
+
+   Log(LOG_DEBUG, "📰 Téléchargement du calendrier économique...");
+
+   int res = WebRequest("GET", url, cookie, referer, timeout, data, 0, result, headers);
+
+   if(res == -1) {
+      int error = GetLastError();
+      news_api_failures++;
+
+      Log(LOG_ERROR, "WebRequest error: " + IntegerToString(error) +
+          " (échec " + IntegerToString(news_api_failures) + "/" +
+          IntegerToString(NEWS_API_MAX_FAILURES) + ")");
+
+      if(error == 4060) {
+         Log(LOG_WARN, "URL non autorisée. Ajoutez dans Outils → Options → Expert Advisors → WebRequest");
+         Log(LOG_WARN, "   https://nfs.faireconomy.media");
+      }
+
+      // ✅ v27.54: Activer circuit breaker après X échecs
+      if(news_api_failures >= NEWS_API_MAX_FAILURES) {
+         news_api_disabled_until = TimeCurrent() + NEWS_API_DISABLE_DURATION;
+         Alert("⚠️ API News désactivée (circuit breaker) après " +
+               IntegerToString(news_api_failures) + " échecs - réactivation dans 1 heure");
+         Log(LOG_ERROR, "🔴 Circuit breaker activé - API news désactivée jusqu'à " +
+             TimeToString(news_api_disabled_until));
+      }
+      return;
+   }
+
+   if(res == 200) {
+      string json = CharArrayToString(result);
+      ParseNewsJSON(json);
+      last_news_update = TimeCurrent();
+      // ✅ v27.54: Réinitialiser compteur d'échecs si succès
+      news_api_failures = 0;
+      Log(LOG_INFO, "✅ Calendrier chargé: " + IntegerToString(ArraySize(news_events)) + " événements");
+   } else if(res == 429) {
+      news_api_failures++;
+      Log(LOG_WARN, "Limite de requêtes API atteinte (429) - échec " +
+          IntegerToString(news_api_failures) + "/" + IntegerToString(NEWS_API_MAX_FAILURES));
+      last_news_update = TimeCurrent();
+
+      // ✅ v27.54: Circuit breaker pour rate limiting
+      if(news_api_failures >= NEWS_API_MAX_FAILURES) {
+         news_api_disabled_until = TimeCurrent() + NEWS_API_DISABLE_DURATION;
+         Alert("⚠️ API News désactivée (rate limiting) - réactivation dans 1 heure");
+         Log(LOG_ERROR, "🔴 Circuit breaker activé (429) - API news désactivée");
+      }
+   } else {
+      news_api_failures++;
+      Log(LOG_WARN, "HTTP Error: " + IntegerToString(res) + " - échec " +
+          IntegerToString(news_api_failures) + "/" + IntegerToString(NEWS_API_MAX_FAILURES));
+
+      if(news_api_failures >= NEWS_API_MAX_FAILURES) {
+         news_api_disabled_until = TimeCurrent() + NEWS_API_DISABLE_DURATION;
+         Alert("⚠️ API News désactivée - erreurs répétées");
+         Log(LOG_ERROR, "🔴 Circuit breaker activé - API news désactivée");
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| ✅ v27.4 FIX: Parser le JSON avec validation robuste           |
+//| Correction: Pré-allocation mémoire + validation stricte        |
+//+------------------------------------------------------------------+
+void ParseNewsJSON(string json)
+{
+   ArrayResize(news_events, 0);
+
+   if(StringLen(json) < 10) {
+      Log(LOG_WARN, "JSON invalide: trop court (" + IntegerToString(StringLen(json)) + " caractères)");
+      return;
+   }
+
+   if(StringFind(json, "[") < 0) {
+      Log(LOG_WARN, "JSON invalide: pas de tableau détecté");
+      return;
+   }
+
+   // ✅ v27.4: Pré-allocation pour performance
+   NewsEvent temp_events[];
+   ArrayResize(temp_events, 1000);  // Capacité estimée
+
+   int start = 0;
+   int count = 0;
+   int max_events = 1000;
+
+   while(count < max_events) {
+      int obj_start = StringFind(json, "{\"title\":", start);
+      if(obj_start < 0) break;
+
+      int obj_end = StringFind(json, "},", obj_start);
+      if(obj_end < 0) obj_end = StringFind(json, "}]", obj_start);
+      if(obj_end < 0) break;
+
+      string obj = StringSubstr(json, obj_start, obj_end - obj_start);
+
+      NewsEvent event;
+      event.title = ExtractField(obj, "title");
+      event.country = ExtractField(obj, "country");
+      event.impact = ExtractField(obj, "impact");
+      event.forecast = ExtractField(obj, "forecast");
+      event.previous = ExtractField(obj, "previous");
+
+      string date_str = ExtractField(obj, "date");
+      event.time = ParseDateString(date_str);
+
+      // ✅ v27.4: Validation avant ajout
+      if(event.time > 0 && StringLen(event.country) > 0) {
+         if(IsRelevantCurrency(event.country)) {
+            temp_events[count++] = event;
+         }
+      }
+
+      start = obj_end + 1;
+   }
+
+   if(count >= max_events) {
+      Log(LOG_WARN, "Limite d'événements atteinte (" + IntegerToString(max_events) + ")");
+   }
+
+   // ✅ v27.4: Une seule allocation finale
+   ArrayResize(news_events, count);
+   for(int i = 0; i < count; i++) {
+      news_events[i] = temp_events[i];
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Extraire un champ du JSON                                        |
+//+------------------------------------------------------------------+
+string ExtractField(string json, string field)
+{
+   string search = "\"" + field + "\":\"";
+   int start = StringFind(json, search);
+   if(start < 0) return "";
+
+   start += StringLen(search);
+   int end = StringFind(json, "\"", start);
+   if(end < 0) return "";
+
+   return StringSubstr(json, start, end - start);
+}
+
+//+------------------------------------------------------------------+
+//| ✅ v27.4 FIX: Parser date avec validation années bissextiles   |
+//| Correction: Validation complète jours/mois                      |
+//+------------------------------------------------------------------+
+datetime ParseDateString(string date_str)
+{
+   if(StringLen(date_str) < 19) return 0;
+
+   MqlDateTime dt;
+   ZeroMemory(dt);
+
+   dt.year = (int)StringToInteger(StringSubstr(date_str, 0, 4));
+   dt.mon = (int)StringToInteger(StringSubstr(date_str, 5, 2));
+   dt.day = (int)StringToInteger(StringSubstr(date_str, 8, 2));
+   dt.hour = (int)StringToInteger(StringSubstr(date_str, 11, 2));
+   dt.min = (int)StringToInteger(StringSubstr(date_str, 14, 2));
+   dt.sec = (int)StringToInteger(StringSubstr(date_str, 17, 2));
+
+   // Validation de base
+   if(dt.year < 2000 || dt.year > 2100) return 0;
+   if(dt.mon < 1 || dt.mon > 12) return 0;
+   if(dt.hour > 23 || dt.min > 59 || dt.sec > 59) return 0;
+
+   // ✅ v27.4 FIX: Validation jours selon mois ET année bissextile
+   int max_day = 31;
+
+   if(dt.mon == 2) {
+      // Février : vérifier année bissextile
+      bool is_leap = (dt.year % 4 == 0 && dt.year % 100 != 0) || (dt.year % 400 == 0);
+      max_day = is_leap ? 29 : 28;
+   }
+   else if(dt.mon == 4 || dt.mon == 6 || dt.mon == 9 || dt.mon == 11) {
+      // Avril, Juin, Septembre, Novembre : 30 jours
+      max_day = 30;
+   }
+
+   if(dt.day < 1 || dt.day > max_day) return 0;
+
+   return StructToTime(dt);
+}
+
+//+------------------------------------------------------------------+
+//| Vérifier si la devise est pertinente                             |
+//+------------------------------------------------------------------+
+bool IsRelevantCurrency(string currency)
+{
+   string currencies[];
+   StringSplit(NewsCurrencies, ',', currencies);
+
+   for(int i = 0; i < ArraySize(currencies); i++) {
+      StringTrimLeft(currencies[i]);
+      StringTrimRight(currencies[i]);
+      if(currencies[i] == currency) return true;
+   }
+
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Vérifier si news à venir (filtre actif)                         |
+//+------------------------------------------------------------------+
+bool IsNewsTime(string symbol)
+{
+   if(!UseNewsFilter) return false;
+
+   if(TimeCurrent() - last_news_update > NEWS_RELOAD_INTERVAL) {
+      LoadNewsCalendar();
+   }
+
+   datetime now = TimeCurrent();
+
+   string base = StringSubstr(symbol, 0, 3);
+   string quote = StringSubstr(symbol, 3, 3);
+
+   for(int i = 0; i < ArraySize(news_events); i++) {
+      if(news_events[i].country != base && news_events[i].country != quote) continue;
+
+      bool filter_this = false;
+      if(news_events[i].impact == "High" && FilterHighImpact) filter_this = true;
+      if(news_events[i].impact == "Medium" && FilterMediumImpact) filter_this = true;
+      if(news_events[i].impact == "Low" && FilterLowImpact) filter_this = true;
+
+      if(!filter_this) continue;
+
+      int time_diff = (int)(news_events[i].time - now);
+
+      if(time_diff > 0 && time_diff <= MinutesBeforeNews * 60) {
+         Log(LOG_DEBUG, "📰 News filter: " + symbol + " - " + news_events[i].title +
+             " dans " + IntegerToString(time_diff/60) + " min");
+         return true;
+      }
+
+      if(time_diff < 0 && time_diff >= -MinutesAfterNews * 60) {
+         return true;
+      }
+   }
+
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| ✅ v27.4 OPT: Mettre à jour cache indicateurs                   |
+//| Optimisation: Cache 1 seconde pour éviter recalculs            |
+//+------------------------------------------------------------------+
+//| ✅ REFACTOR: Fixed static array warnings - use temp dynamic arrays |
+//+------------------------------------------------------------------+
+void UpdateIndicatorCache(int idx)
+{
+   // Cache for INDICATOR_CACHE_SECONDS
+   if(TimeCurrent() - indicators_cache[idx].last_update < INDICATOR_CACHE_SECONDS) return;
+
+   // Use temporary dynamic arrays for CopyBuffer (avoids static array warnings)
+   double temp_ema_fast[], temp_ema_slow[], temp_rsi[], temp_atr[], temp_adx[];
+
+   ArraySetAsSeries(temp_ema_fast, true);
+   ArraySetAsSeries(temp_ema_slow, true);
+   ArraySetAsSeries(temp_rsi, true);
+   ArraySetAsSeries(temp_atr, true);
+   ArraySetAsSeries(temp_adx, true);
+
+   // Copy from indicators to temp arrays
+   if(CopyBuffer(indicators[idx].handle_ema_fast, 0, 0, 3, temp_ema_fast) != 3) return;
+   if(CopyBuffer(indicators[idx].handle_ema_slow, 0, 0, 3, temp_ema_slow) != 3) return;
+   if(CopyBuffer(indicators[idx].handle_rsi, 0, 0, 3, temp_rsi) != 3) return;
+   if(CopyBuffer(indicators[idx].handle_atr, 0, 0, 2, temp_atr) != 2) return;
+   if(CopyBuffer(indicators[idx].handle_adx, 0, 0, 2, temp_adx) != 2) return;
+
+   // Copy from temp arrays to cache (static arrays)
+   for(int i = 0; i < 3; i++) {
+      indicators_cache[idx].ema_fast[i] = temp_ema_fast[i];
+      indicators_cache[idx].ema_slow[i] = temp_ema_slow[i];
+      indicators_cache[idx].rsi[i] = temp_rsi[i];
+   }
+   for(int i = 0; i < 2; i++) {
+      indicators_cache[idx].atr[i] = temp_atr[i];
+      indicators_cache[idx].adx[i] = temp_adx[i];
+   }
+
+   indicators_cache[idx].last_update = TimeCurrent();
+}
 
 //+------------------------------------------------------------------+
 //| ✅ v27.4 OPT: Obtenir signal avec cache indicateurs            |
@@ -580,11 +1028,238 @@ int GetSignalForSymbol(string symbol)
 }
 
 //+------------------------------------------------------------------+
+//| ✅ v27.4 FIX: Vérifier reset journalier                        |
+//| Correction: Reset à minuit exact (calendrier)                  |
+//+------------------------------------------------------------------+
+void CheckDailyReset()
+{
+   // ✅ v27.4: Optimisation - ne check que toutes les 60 secondes
+   if(TimeCurrent() - last_daily_check < 60) return;
+   last_daily_check = TimeCurrent();
+
+   MqlDateTime now_dt;
+   TimeToStruct(TimeCurrent(), now_dt);
+
+   MqlDateTime last_dt;
+   TimeToStruct(current_day, last_dt);
+
+   // ✅ v27.4 FIX: Comparer dates calendaires exactes
+   if(now_dt.year != last_dt.year || now_dt.day_of_year != last_dt.day_of_year) {
+      // Nouveau jour détecté
+      Log(LOG_INFO, "🔄 Reset statistiques journalières");
+      Log(LOG_INFO, "   Ancien jour: " + TimeToString(StructToTime(last_dt), TIME_DATE));
+      Log(LOG_INFO, "   Trades aujourd'hui: " + IntegerToString(trades_today) +
+          " | P&L: " + DoubleToString(daily_profit, 2));
+
+      trades_today = 0;
+      daily_profit = 0;
+      current_day = TimeCurrent();
+
+      Log(LOG_INFO, "   Nouveau jour: " + TimeToString(current_day, TIME_DATE));
+   }
+}
+
+//+------------------------------------------------------------------+
+//| ✅ v27.56: Vérifier si position corrélée existe                 |
 //| Évite double exposition sur paires corrélées                    |
+//+------------------------------------------------------------------+
+bool HasCorrelatedPosition(string symbol)
+{
+   if(!UseCorrelationFilter) return false;
 
+   for(int i = 0; i < ArraySize(correlations); i++) {
+      // Vérifier si le symbole est dans cette paire de corrélation
+      bool is_symbol1 = (correlations[i].symbol1 == symbol);
+      bool is_symbol2 = (correlations[i].symbol2 == symbol);
 
+      if(!is_symbol1 && !is_symbol2) continue;
 
+      // Vérifier si corrélation dépasse le seuil
+      if(MathAbs(correlations[i].correlation) > MaxCorrelation) {
+         // Identifier le symbole corrélé
+         string correlated_symbol = is_symbol1 ? correlations[i].symbol2 : correlations[i].symbol1;
 
+         // Vérifier si une position existe sur le symbole corrélé
+         int positions = GetSymbolPositions(correlated_symbol);
+
+         if(positions > 0) {
+            Log(LOG_DEBUG, "🔗 " + symbol + " bloqué - Position corrélée sur " + correlated_symbol +
+                " (corr=" + DoubleToString(correlations[i].correlation, 2) + ")");
+            return true;
+         }
+      }
+   }
+
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| ✅ v27.56: Calculer ATR moyen sur N périodes                    |
+//| Utilisé pour position sizing basé sur volatilité                |
+//+------------------------------------------------------------------+
+double CalculateAverageATR(string symbol, int periods = 20)
+{
+   // Trouver l'index du symbole
+   int idx = -1;
+   for(int i = 0; i < ArraySize(indicators); i++) {
+      if(indicators[i].symbol == symbol) {
+         idx = i;
+         break;
+      }
+   }
+
+   if(idx < 0) return 0;
+
+   // Vérifier si on a assez de données dans le cache
+   datetime now = TimeCurrent();
+   bool need_update = false;
+
+   // Trouver ou créer l'entrée dans atr_history
+   int hist_idx = -1;
+   for(int i = 0; i < ArraySize(atr_history); i++) {
+      if(atr_history[i].symbol == symbol) {
+         hist_idx = i;
+         break;
+      }
+   }
+
+   // Si pas trouvé, créer nouvelle entrée
+   if(hist_idx < 0) {
+      hist_idx = ArraySize(atr_history);
+      ArrayResize(atr_history, hist_idx + 1);
+      atr_history[hist_idx].symbol = symbol;
+      atr_history[hist_idx].count = 0;
+      atr_history[hist_idx].last_update = 0;
+      need_update = true;
+   }
+
+   // Mettre à jour si nécessaire (toutes les 4 heures ou si vide)
+   if(now - atr_history[hist_idx].last_update > 14400 || atr_history[hist_idx].count == 0) {
+      need_update = true;
+   }
+
+   if(need_update) {
+      // Copier les valeurs ATR historiques
+      double atr_buffer[];
+      ArraySetAsSeries(atr_buffer, true);
+
+      int copied = CopyBuffer(indicators[idx].handle_atr, 0, 0, periods, atr_buffer);
+
+      if(copied == periods) {
+         // Stocker dans le cache
+         for(int i = 0; i < periods && i < 20; i++) {
+            atr_history[hist_idx].atr_values[i] = atr_buffer[i];
+         }
+         atr_history[hist_idx].count = MathMin(copied, 20);
+         atr_history[hist_idx].last_update = now;
+      }
+   }
+
+   // Calculer la moyenne
+   if(atr_history[hist_idx].count == 0) {
+      // Fallback sur valeur actuelle
+      return indicators_cache[idx].atr[0];
+   }
+
+   double sum = 0;
+   for(int i = 0; i < atr_history[hist_idx].count; i++) {
+      sum += atr_history[hist_idx].atr_values[i];
+   }
+
+   return sum / atr_history[hist_idx].count;
+}
+
+//+------------------------------------------------------------------+
+//| Vérifier conditions de trading                                   |
+//+------------------------------------------------------------------+
+bool CanTrade(string symbol)
+{
+   // Vérifier spread
+   long spread = SymbolInfoInteger(symbol, SYMBOL_SPREAD);
+   if(spread > MaxSpread_Points) return false;
+
+   // Vérifier session
+   MqlDateTime time;
+   TimeToStruct(TimeCurrent(), time);
+   int hour = time.hour;
+
+   bool in_session = false;
+   if(Trade_Asian && hour >= 0 && hour < 9) in_session = true;
+   if(Trade_London && hour >= 8 && hour < 17) in_session = true;
+   if(Trade_NewYork && hour >= 14 && hour < 23) in_session = true;
+
+   if(!in_session) return false;
+
+   // Vérifier news
+   if(IsNewsTime(symbol)) return false;
+
+   // ✅ v27.4: Vérifier reset journalier
+   CheckDailyReset();
+
+   // Vérifier limites journalières
+   if(trades_today >= MaxTradesPerDay) return false;
+
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   if(daily_profit < -(balance * MaxDailyLoss / 100)) return false;
+
+   // Vérifier limites de positions
+   if(GetTotalPositions() >= MaxOpenPositions) return false;
+   if(GetSymbolPositions(symbol) >= MaxPositionsPerSymbol) return false;
+
+   // ✅ v27.56: Vérifier corrélations
+   if(HasCorrelatedPosition(symbol)) return false;
+
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| ✅ REFACTOR: Helper function to count positions (DRY principle) |
+//| Avoids code duplication between GetTotalPositions and GetSymbolPositions |
+//+------------------------------------------------------------------+
+int CountPositions(string symbol_filter = "", int max_count = 0)
+{
+   int count = 0;
+   int total = PositionsTotal();
+
+   // If max_count not specified, use a very high number
+   if(max_count == 0) max_count = 999999;
+
+   for(int i = total - 1; i >= 0; i--) {
+      // Early exit optimization
+      if(count >= max_count) break;
+
+      ulong ticket = PositionGetTicket(i);
+      if(!PositionSelectByTicket(ticket)) continue;
+
+      // Check magic number
+      if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+
+      // If symbol filter specified, check it
+      if(symbol_filter != "" && PositionGetString(POSITION_SYMBOL) != symbol_filter) continue;
+
+      count++;
+   }
+
+   return count;
+}
+
+//+------------------------------------------------------------------+
+//| ✅ v27.4 OPT: Compter positions totales avec sortie anticipée  |
+//| ✅ REFACTOR: Uses CountPositions helper (no duplication)       |
+//+------------------------------------------------------------------+
+int GetTotalPositions()
+{
+   return CountPositions("", MaxOpenPositions);
+}
+
+//+------------------------------------------------------------------+
+//| ✅ v27.4 OPT: Compter positions symbole avec sortie anticipée  |
+//| ✅ REFACTOR: Uses CountPositions helper (no duplication)       |
+//+------------------------------------------------------------------+
+int GetSymbolPositions(string symbol)
+{
+   return CountPositions(symbol, MaxPositionsPerSymbol);
+}
 
 //+------------------------------------------------------------------+
 //| ✅ v27.56: Calculer niveaux TP1 et TP2 (dynamiques ou fixes)    |
@@ -653,8 +1328,154 @@ void CalculateTP1TP2Levels(string symbol, int direction, double &tp1_pips, doubl
 }
 
 //+------------------------------------------------------------------+
+//| ✅ v27.56: Fermer partiellement une position                    |
 //+------------------------------------------------------------------+
+bool PartialClosePosition(ulong ticket, double close_percent)
+{
+   if(!PositionSelectByTicket(ticket)) {
+      Log(LOG_ERROR, "Partial Close: Position #" + IntegerToString(ticket) + " non trouvée");
+      return false;
+   }
+
+   string symbol = PositionGetString(POSITION_SYMBOL);
+   double current_volume = PositionGetDouble(POSITION_VOLUME);
+   double volume_step = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+   double min_volume = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+
+   // Calculer volume à fermer
+   double close_volume = current_volume * (close_percent / 100.0);
+
+   // Arrondir au lot step
+   close_volume = MathFloor(close_volume / volume_step) * volume_step;
+   close_volume = NormalizeDouble(close_volume, 2);
+
+   // Vérifier qu'on a assez de volume
+   double remaining_volume = current_volume - close_volume;
+
+   if(close_volume < min_volume) {
+      Log(LOG_WARN, "Partial Close: Volume trop petit (" + DoubleToString(close_volume, 2) + ")");
+      return false;
+   }
+
+   if(remaining_volume < min_volume) {
+      Log(LOG_WARN, "Partial Close: Volume restant trop petit, fermeture totale");
+      close_volume = current_volume;  // Fermer tout
+   }
+
+   // Préparer requête de fermeture partielle
+   MqlTradeRequest request;
+   MqlTradeResult result;
+   ZeroMemory(request);
+   ZeroMemory(result);
+
+   request.action = TRADE_ACTION_DEAL;
+   request.position = ticket;
+   request.symbol = symbol;
+   request.volume = close_volume;
+   request.deviation = 3;
+   request.magic = MagicNumber;
+   request.type = (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY) ? ORDER_TYPE_SELL : ORDER_TYPE_BUY;
+   request.price = (request.type == ORDER_TYPE_SELL) ? SymbolInfoDouble(symbol, SYMBOL_BID) : SymbolInfoDouble(symbol, SYMBOL_ASK);
+   request.type_filling = ORDER_FILLING_IOC;
+
+   if(!OrderSend(request, result)) {
+      int err = GetLastError();
+      Log(LOG_ERROR, "Partial Close FAILED: Ticket #" + IntegerToString(ticket) +
+          " | Volume: " + DoubleToString(close_volume, 2) +
+          " | Error: " + IntegerToString(err));
+      return false;
+   }
+
+   if(result.retcode == TRADE_RETCODE_DONE) {
+      // Calculer profit de la partie fermée
+      double close_price = result.price;
+      double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
+      int position_type = (int)PositionGetInteger(POSITION_TYPE);
+      double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+
+      double profit_pips = 0;
+      if(position_type == POSITION_TYPE_BUY) {
+         profit_pips = (close_price - open_price) / point / PIPS_TO_POINTS_MULTIPLIER;
+      } else {
+         profit_pips = (open_price - close_price) / point / PIPS_TO_POINTS_MULTIPLIER;
+      }
+
+      total_partial_closes++;
+      // Note: MqlTradeResult doesn't have profit member - profit calculated via account history
+
+      Log(LOG_INFO, "✅ Partial Close: " + symbol + " #" + IntegerToString(ticket) +
+          " | Fermé: " + DoubleToString(close_volume, 2) + "/" + DoubleToString(current_volume, 2) +
+          " lots (" + DoubleToString(close_percent, 0) + "%) " +
+          " | Profit: " + DoubleToString(profit_pips, 1) + " pips" +
+          " | Restant: " + DoubleToString(remaining_volume, 2) + " lots");
+
+      return true;
+   } else {
+      Log(LOG_ERROR, "Partial Close REJECTED: Retcode " + IntegerToString(result.retcode));
+      return false;
+   }
+}
+
 //+------------------------------------------------------------------+
+//| ✅ v27.56: Trouver position dans tableau partial close          |
+//+------------------------------------------------------------------+
+int FindPartialPosition(ulong ticket)
+{
+   for(int i = 0; i < partial_close_count; i++) {
+      if(partially_closed[i].ticket == ticket) {
+         return i;
+      }
+   }
+   return -1;
+}
+
+//+------------------------------------------------------------------+
+//| ✅ v27.56: Ajouter position au tracker partial close            |
+//+------------------------------------------------------------------+
+void AddPartialPosition(ulong ticket, double initial_volume, double tp1_level, double tp2_level)
+{
+   int idx = FindPartialPosition(ticket);
+
+   if(idx >= 0) {
+      // Déjà existante, mettre à jour
+      partially_closed[idx].remaining_volume = initial_volume;
+      return;
+   }
+
+   // Ajouter nouvelle entrée
+   ArrayResize(partially_closed, partial_close_count + 1);
+
+   partially_closed[partial_close_count].ticket = ticket;
+   partially_closed[partial_close_count].initial_volume = initial_volume;
+   partially_closed[partial_close_count].remaining_volume = initial_volume;
+   partially_closed[partial_close_count].tp1_level = tp1_level;
+   partially_closed[partial_close_count].tp2_level = tp2_level;
+   partially_closed[partial_close_count].tp1_reached = false;
+   partially_closed[partial_close_count].sl_moved_to_be = false;
+   partially_closed[partial_close_count].tp1_time = 0;
+
+   partial_close_count++;
+}
+
+//+------------------------------------------------------------------+
+//| ✅ v27.56: Supprimer position du tracker                        |
+//+------------------------------------------------------------------+
+void RemovePartialPosition(ulong ticket)
+{
+   int idx = FindPartialPosition(ticket);
+   if(idx < 0) return;
+
+   // Décaler les éléments
+   for(int i = idx; i < partial_close_count - 1; i++) {
+      partially_closed[i] = partially_closed[i + 1];
+   }
+
+   partial_close_count--;
+   ArrayResize(partially_closed, partial_close_count);
+}
+
+//+------------------------------------------------------------------+
+//| Ouvrir position                                                   |
 //+------------------------------------------------------------------+
 bool OpenPosition(string symbol, int direction)
 {
@@ -806,7 +1627,176 @@ bool OpenPosition(string symbol, int direction)
 
 //+------------------------------------------------------------------+
 //| Calculer lot                                                      |
+//| ✅ v27.54: Support TP/SL dynamiques pour calcul risque           |
+//| ✅ v27.56: Position sizing basé sur volatilité (ATR)             |
 //+------------------------------------------------------------------+
+double CalculateLotSize(string symbol)
+{
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   double base_risk_percent = RiskPercent;
+
+   // ✅ v27.56: Ajuster risque selon volatilité
+   if(UseVolatilityBasedSizing) {
+      // Calculer ratio de volatilité (ATR actuel vs moyenne)
+      double current_atr = 0;
+      double average_atr = CalculateAverageATR(symbol, 20);
+
+      // Trouver l'index du symbole
+      int idx = -1;
+      for(int i = 0; i < ArraySize(indicators); i++) {
+         if(indicators[i].symbol == symbol) {
+            idx = i;
+            break;
+         }
+      }
+
+      if(idx >= 0 && average_atr > 0) {
+         current_atr = indicators_cache[idx].atr[0];
+         double volatility_ratio = current_atr / average_atr;
+
+         // Ajuster risque inversement à la volatilité
+         // Volatilité haute (ratio > 1) → risque réduit
+         // Volatilité basse (ratio < 1) → risque augmenté
+         double adjusted_risk = RiskPercent / volatility_ratio;
+
+         // Limiter l'ajustement selon MaxVolatilityMultiplier
+         adjusted_risk = MathMin(adjusted_risk, RiskPercent * MaxVolatilityMultiplier);
+         adjusted_risk = MathMax(adjusted_risk, RiskPercent / MaxVolatilityMultiplier);
+
+         Log(LOG_DEBUG, symbol + " - Volatility sizing: ATR=" + DoubleToString(current_atr/SymbolInfoDouble(symbol, SYMBOL_POINT), 1) +
+             " | AvgATR=" + DoubleToString(average_atr/SymbolInfoDouble(symbol, SYMBOL_POINT), 1) +
+             " | Ratio=" + DoubleToString(volatility_ratio, 2) +
+             " | Risk: " + DoubleToString(RiskPercent, 2) + "% → " + DoubleToString(adjusted_risk, 2) + "%");
+
+         base_risk_percent = adjusted_risk;
+      }
+   }
+
+   double risk_amount = balance * base_risk_percent / 100.0;
+
+   double tick_value = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+   double tick_size = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   double min_lot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   double max_lot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+   double lot_step = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+
+   // ✅ v27.54: Calculer SL effectif (dynamique ou fixe)
+   double effective_sl_pips = ScalpSL_Pips;
+
+   if(UseDynamicTPSL) {
+      // Trouver l'index du symbole pour obtenir l'ATR
+      int idx = -1;
+      for(int i = 0; i < ArraySize(indicators); i++) {
+         if(indicators[i].symbol == symbol) {
+            idx = i;
+            break;
+         }
+      }
+
+      if(idx >= 0) {
+         double atr_points = indicators_cache[idx].atr[0] / point;
+         effective_sl_pips = (atr_points / PIPS_TO_POINTS_MULTIPLIER) * ATR_SL_Multiplier;
+         effective_sl_pips = MathMax(effective_sl_pips, MIN_SL_PIPS_LIMIT);
+      }
+   }
+
+   double pip_value = tick_value / tick_size * point * PIPS_TO_POINTS_MULTIPLIER;
+   double lot_size = risk_amount / (effective_sl_pips * pip_value);
+
+   lot_size = MathFloor(lot_size / lot_step) * lot_step;
+   lot_size = MathMax(min_lot, MathMin(lot_size, MaxLotSize));
+   lot_size = MathMin(lot_size, max_lot);
+
+   return NormalizeDouble(lot_size, 2);
+}
+
+//+------------------------------------------------------------------+
+//| ✅ FIX: Throttling - Vérifier si modification SL autorisée      |
+//| Évite erreur 4756 (modifications trop fréquentes)              |
+//+------------------------------------------------------------------+
+bool CanModifySL(ulong ticket, double new_sl, double point)
+{
+   datetime now = TimeCurrent();
+
+   // Chercher si on a déjà modifié ce ticket récemment
+   for(int i = 0; i < last_mod_count; i++) {
+      if(last_modifications[i].ticket == ticket) {
+         // Vérifier le délai minimum
+         if((now - last_modifications[i].last_time) < MIN_SL_MODIFICATION_INTERVAL_SEC) {
+            Log(LOG_DEBUG, "⏸️ Throttling: Ticket #" + IntegerToString(ticket) +
+                " - Dernière modif il y a " + IntegerToString(now - last_modifications[i].last_time) + "s");
+            return false;
+         }
+
+         // Vérifier le changement minimum
+         double sl_change_points = MathAbs(new_sl - last_modifications[i].last_sl) / point;
+         if(sl_change_points < MIN_SL_CHANGE_POINTS) {
+            Log(LOG_DEBUG, "⏸️ Throttling: Ticket #" + IntegerToString(ticket) +
+                " - Changement trop petit (" + DoubleToString(sl_change_points, 1) + " pts < " +
+                IntegerToString(MIN_SL_CHANGE_POINTS) + " pts)");
+            return false;
+         }
+
+         return true;
+      }
+   }
+
+   // Premier enregistrement pour ce ticket
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| ✅ FIX: Enregistrer modification SL                             |
+//+------------------------------------------------------------------+
+void RecordSLModification(ulong ticket, double new_sl)
+{
+   datetime now = TimeCurrent();
+   bool found = false;
+
+   // Mettre à jour si existe
+   for(int i = 0; i < last_mod_count; i++) {
+      if(last_modifications[i].ticket == ticket) {
+         last_modifications[i].last_time = now;
+         last_modifications[i].last_sl = new_sl;
+         found = true;
+         break;
+      }
+   }
+
+   // Ajouter nouveau si n'existe pas
+   if(!found) {
+      ArrayResize(last_modifications, last_mod_count + 1);
+      last_modifications[last_mod_count].ticket = ticket;
+      last_modifications[last_mod_count].last_time = now;
+      last_modifications[last_mod_count].last_sl = new_sl;
+      last_mod_count++;
+   }
+
+   // Nettoyer les vieux enregistrements (> 1 heure)
+   if(last_mod_count > 50) {
+      int cleaned = 0;
+      for(int i = last_mod_count - 1; i >= 0; i--) {
+         if((now - last_modifications[i].last_time) > 3600) {
+            // Supprimer cet élément
+            for(int j = i; j < last_mod_count - 1; j++) {
+               last_modifications[j] = last_modifications[j + 1];
+            }
+            last_mod_count--;
+            cleaned++;
+         }
+      }
+      if(cleaned > 0) {
+         ArrayResize(last_modifications, last_mod_count);
+         Log(LOG_DEBUG, "🧹 Nettoyage throttling: " + IntegerToString(cleaned) + " entrées supprimées");
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| ✅ v27.4 FIX CRITIQUE: Gérer toutes les positions              |
+//| CORRECTION MAJEURE: Erreur 10036 "Stop Loss invalide"          |
+//|                                                                  |
 //| Corrections appliquées:                                         |
 //|   1. Vérification SYMBOL_TRADE_STOPS_LEVEL (distance minimale) |
 //|   2. Validation SL ne dépasse pas le prix actuel               |
@@ -1306,6 +2296,25 @@ void CheckForUpdates()
 //+------------------------------------------------------------------+
 //| Comparer deux versions                                           |
 //+------------------------------------------------------------------+
+int CompareVersions(string v1, string v2)
+{
+   string parts1[], parts2[];
+   StringSplit(v1, '.', parts1);
+   StringSplit(v2, '.', parts2);
+
+   int major1 = (int)StringToInteger(parts1[0]);
+   int minor1 = ArraySize(parts1) > 1 ? (int)StringToInteger(parts1[1]) : 0;
+
+   int major2 = (int)StringToInteger(parts2[0]);
+   int minor2 = ArraySize(parts2) > 1 ? (int)StringToInteger(parts2[1]) : 0;
+
+   int num1 = major1 * 1000 + minor1;
+   int num2 = major2 * 1000 + minor2;
+
+   if(num1 > num2) return 1;
+   if(num1 < num2) return -1;
+   return 0;
+}
 
 //+------------------------------------------------------------------+
 //| Télécharger et installer la mise à jour                          |
