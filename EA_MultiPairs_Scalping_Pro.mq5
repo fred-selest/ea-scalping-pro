@@ -38,10 +38,10 @@
 //|                                                                  |
 //| AUTEUR: fred-selest                                             |
 //| GITHUB: https://github.com/fred-selest/ea-scalping-pro         |
-//| VERSION: 27.56                                                   |
-//| DATE: 2025-11-11
+//| VERSION: 27.57 (Phase 1 Optimization)                           |
+//| DATE: 2025-11-12
 //+------------------------------------------------------------------+
-#property version   "27.560"
+#property version   "27.570"
 #property strict
 #property description "Multi-Symbol Scalping EA avec News Filter"
 #property description "Dashboard temps réel + ONNX + Correctifs Critiques v27.4"
@@ -136,7 +136,7 @@ struct ATRHistory {
 #define ORDER_RETRY_COUNT 3             // Nombre de tentatives pour ordres
 #define ORDER_RETRY_DELAY_MS 100        // Délai entre retries (ms)
 #define DASHBOARD_LINES 17              // Nombre de lignes dans le dashboard
-#define CURRENT_VERSION "27.56"         // Version actuelle
+#define CURRENT_VERSION "27.57"         // Version actuelle (Phase 1 Optimization)
 
 // === MODULE INCLUDES ===
 #include "includes/Utils.mqh"
@@ -169,16 +169,16 @@ input int      MaxSpread_Points = 20;
 // === PARTIAL CLOSE ===
 input group "=== PARTIAL CLOSE SETTINGS ==="
 input bool     UsePartialClose = true;          // Activer fermeture partielle
-input double   PartialClosePercent = 50.0;      // % à fermer à TP1 (1-99)
-input double   TP1_Multiplier = 1.0;            // TP1 = ATR × multiplier (si dynamique)
-input double   TP2_Multiplier = 2.5;            // TP2 = ATR × multiplier (si dynamique)
+input double   PartialClosePercent = 35.0;      // % à fermer à TP1 (1-99) - ✅ v27.57: Optimisé 35% au lieu de 50%
+input double   TP1_Multiplier = 0.75;           // TP1 = ATR × multiplier (si dynamique) - ✅ v27.57: Optimisé 0.75 au lieu de 1.0
+input double   TP2_Multiplier = 3.5;            // TP2 = ATR × multiplier (si dynamique) - ✅ v27.57: Optimisé 3.5 au lieu de 2.5
 input double   TP1_Fixed_Pips = 5.0;            // TP1 fixe en pips (si non dynamique)
-input double   TP2_Fixed_Pips = 15.0;           // TP2 fixe en pips (si non dynamique)
+input double   TP2_Fixed_Pips = 20.0;           // TP2 fixe en pips (si non dynamique) - ✅ v27.57: Optimisé 20 au lieu de 15
 input bool     MoveSLToBreakEvenAfterTP1 = true; // Déplacer SL à BE après TP1
 
 // === GESTION DU RISQUE ===
 input group "=== RISK MANAGEMENT ==="
-input double   RiskPercent = 0.5;
+input double   RiskPercent = 1.0;               // ✅ v27.57: Optimisé 1.0% au lieu de 0.5%
 input double   MaxLotSize = 1.0;
 input double   MaxDailyLoss = 3.0;
 input int      MaxTradesPerDay = 50;
@@ -566,6 +566,14 @@ int GetSignalForSymbol(string symbol)
       return 0;
    }
 
+   // ✅ v27.57: Filtre SPREAD - Éviter trades avec spread élevé
+   double current_spread = SymbolInfoInteger(symbol, SYMBOL_SPREAD);
+   if(current_spread > MaxSpread_Points) {
+      Log(LOG_DEBUG, symbol + " - Spread trop élevé (" + DoubleToString(current_spread, 0) +
+          " pts > " + IntegerToString(MaxSpread_Points) + " pts)");
+      return 0;
+   }
+
    // Filtre ATR
    if(indicators_cache[idx].atr[0] < ATR_Filter * PIPS_TO_POINTS_MULTIPLIER * point) return 0;
 
@@ -575,15 +583,25 @@ int GetSignalForSymbol(string symbol)
    bool ema_cross_down = (indicators_cache[idx].ema_fast[1] >= indicators_cache[idx].ema_slow[1] &&
                           indicators_cache[idx].ema_fast[0] < indicators_cache[idx].ema_slow[0]);
 
-   bool rsi_oversold = (indicators_cache[idx].rsi[0] < 30 && indicators_cache[idx].rsi[0] > indicators_cache[idx].rsi[1]);
-   bool rsi_overbought = (indicators_cache[idx].rsi[0] > 70 && indicators_cache[idx].rsi[0] < indicators_cache[idx].rsi[1]);
+   // ✅ v27.57: RSI TREND-FOLLOWING (zone 40-70) au lieu de reversal (<30/>70)
+   // RSI confirme la tendance au lieu d'indiquer un retournement
+   bool rsi_bullish = (indicators_cache[idx].rsi[0] > 40 && indicators_cache[idx].rsi[0] < 70);
+   bool rsi_bearish = (indicators_cache[idx].rsi[0] > 30 && indicators_cache[idx].rsi[0] < 60);
+
+   // Momentum RSI (direction)
+   bool rsi_momentum_up = (indicators_cache[idx].rsi[0] > indicators_cache[idx].rsi[1]);
+   bool rsi_momentum_down = (indicators_cache[idx].rsi[0] < indicators_cache[idx].rsi[1]);
 
    double price = SymbolInfoDouble(symbol, SYMBOL_BID);
    bool price_above = (price > indicators_cache[idx].ema_fast[0] && indicators_cache[idx].ema_fast[0] > indicators_cache[idx].ema_slow[0]);
    bool price_below = (price < indicators_cache[idx].ema_fast[0] && indicators_cache[idx].ema_fast[0] < indicators_cache[idx].ema_slow[0]);
 
-   if((ema_cross_up || rsi_oversold) && price_above) return 1;
-   if((ema_cross_down || rsi_overbought) && price_below) return -1;
+   // ✅ v27.57: Logique AND stricte - Tous les critères doivent être remplis
+   // BUY: EMA cross up + RSI bullish + momentum positif + prix au-dessus EMAs
+   if(ema_cross_up && rsi_bullish && rsi_momentum_up && price_above) return 1;
+
+   // SELL: EMA cross down + RSI bearish + momentum négatif + prix en-dessous EMAs
+   if(ema_cross_down && rsi_bearish && rsi_momentum_down && price_below) return -1;
 
    return 0;
 }
