@@ -47,6 +47,75 @@
 #property description "Dashboard temps réel + ONNX + Correctifs Critiques v27.4"
 #property description "Performance: -40% CPU | Stabilité: +200%"
 
+// === STRUCTURES (doivent être AVANT les includes) ===
+
+// Throttling SL modifications
+struct LastModification {
+   ulong ticket;
+   datetime last_time;
+   double last_sl;
+};
+
+// Partial Close - Tracker positions partiellement fermées
+struct PartiallyClosedPosition {
+   ulong ticket;
+   double initial_volume;      // Volume initial
+   double remaining_volume;    // Volume restant
+   double tp1_level;          // Niveau TP1
+   double tp2_level;          // Niveau TP2
+   bool tp1_reached;          // TP1 atteint ?
+   bool sl_moved_to_be;       // SL déplacé à BE ?
+   datetime tp1_time;         // Heure atteinte TP1
+};
+
+// News Calendar
+struct NewsEvent {
+   datetime time;
+   string title;
+   string country;
+   string impact;
+   string forecast;
+   string previous;
+};
+
+// Indicateurs techniques par symbole
+struct SymbolIndicators {
+   string symbol;
+   int handle_ema_fast;
+   int handle_ema_slow;
+   int handle_rsi;
+   int handle_atr;
+   int handle_adx;
+   bool enabled;
+   int positions_count;
+   double last_profit;
+};
+
+// Cache indicateurs pour optimisation
+struct CachedIndicators {
+   double ema_fast[3];
+   double ema_slow[3];
+   double rsi[3];
+   double atr[2];
+   double adx[2];
+   datetime last_update;
+};
+
+// Gestion des corrélations entre paires
+struct CorrelationPair {
+   string symbol1;
+   string symbol2;
+   double correlation;  // -1 à 1 (négatif = inverse, positif = direct)
+};
+
+// Cache ATR pour calcul volatilité moyenne
+struct ATRHistory {
+   string symbol;
+   double atr_values[20];  // 20 dernières valeurs
+   int count;
+   datetime last_update;
+};
+
 // === MODULE INCLUDES ===
 #include "includes/Utils.mqh"
 #include "includes/Indicators.mqh"
@@ -182,48 +251,22 @@ double daily_profit = 0;
 datetime current_day = 0;
 datetime last_daily_check = 0;  // ✅ v27.4: Nouveau - pour éviter checks répétitifs
 
+// === VARIABLES GLOBALES (structures définies au début du fichier) ===
 
-struct LastModification {
-   ulong ticket;
-   datetime last_time;
-   double last_sl;
-};
-
+// Throttling SL modifications
 LastModification last_modifications[];
 int last_mod_count = 0;
 
-// ✅ v27.56: Partial Close - Tracker positions partiellement fermées
-struct PartiallyClosedPosition {
-   ulong ticket;
-   double initial_volume;      // Volume initial
-   double remaining_volume;    // Volume restant
-   double tp1_level;          // Niveau TP1
-   double tp2_level;          // Niveau TP2
-   bool tp1_reached;          // TP1 atteint ?
-   bool sl_moved_to_be;       // SL déplacé à BE ?
-   datetime tp1_time;         // Heure atteinte TP1
-};
-
+// Partial Close - Tracker positions partiellement fermées
 PartiallyClosedPosition partially_closed[];
 int partial_close_count = 0;
-
-// Statistiques partial close
 int total_partial_closes = 0;
 double total_partial_profit = 0;
 
-// === NEWS CALENDAR ===
-struct NewsEvent {
-   datetime time;
-   string title;
-   string country;
-   string impact;
-   string forecast;
-   string previous;
-};
+// News Calendar
 NewsEvent news_events[];
 datetime last_news_update = 0;
 bool news_filter_active = false;
-// ✅ v27.54: Circuit breaker pour API news
 int news_api_failures = 0;
 datetime news_api_disabled_until = 0;
 
@@ -237,37 +280,9 @@ datetime last_update_check = 0;
 bool update_available = false;
 string latest_version = "";
 
-// === INDICATEURS TECHNIQUES ===
-struct SymbolIndicators {
-   string symbol;
-   int handle_ema_fast;
-   int handle_ema_slow;
-   int handle_rsi;
-   int handle_atr;
-   int handle_adx;
-   bool enabled;
-   int positions_count;
-   double last_profit;
-};
+// Indicateurs techniques
 SymbolIndicators indicators[];
-
-// ✅ v27.4: Cache indicateurs pour optimisation
-struct CachedIndicators {
-   double ema_fast[3];
-   double ema_slow[3];
-   double rsi[3];
-   double atr[2];
-   double adx[2];
-   datetime last_update;
-};
 CachedIndicators indicators_cache[];
-
-// ✅ v27.56: Gestion des corrélations entre paires
-struct CorrelationPair {
-   string symbol1;
-   string symbol2;
-   double correlation;  // -1 à 1 (négatif = inverse, positif = direct)
-};
 
 // Matrix de corrélations (données historiques moyennes)
 CorrelationPair correlations[] = {
@@ -293,13 +308,7 @@ CorrelationPair correlations[] = {
    {"USDCAD", "NZDUSD", -0.68}    // USD/CAD inverse avec NZD/USD
 };
 
-// ✅ v27.56: Cache ATR pour calcul volatilité moyenne
-struct ATRHistory {
-   string symbol;
-   double atr_values[20];  // 20 dernières valeurs
-   int count;
-   datetime last_update;
-};
+// Cache ATR pour calcul volatilité moyenne
 ATRHistory atr_history[];
 
 
