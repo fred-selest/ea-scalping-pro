@@ -38,10 +38,10 @@
 //|                                                                  |
 //| AUTEUR: fred-selest                                             |
 //| GITHUB: https://github.com/fred-selest/ea-scalping-pro         |
-//| VERSION: 27.57 (Phase 1 Optimization)                           |
+//| VERSION: 27.58 (Phase 2 + Fix Reward/Risk Ratio)                |
 //| DATE: 2025-11-12
 //+------------------------------------------------------------------+
-#property version   "27.570"
+#property version   "27.580"
 #property strict
 #property description "Multi-Symbol Scalping EA avec News Filter"
 #property description "Dashboard temps réel + ONNX + Correctifs Critiques v27.4"
@@ -136,7 +136,7 @@ struct ATRHistory {
 #define ORDER_RETRY_COUNT 3             // Nombre de tentatives pour ordres
 #define ORDER_RETRY_DELAY_MS 100        // Délai entre retries (ms)
 #define DASHBOARD_LINES 17              // Nombre de lignes dans le dashboard
-#define CURRENT_VERSION "27.57"         // Version actuelle (Phase 1 Optimization)
+#define CURRENT_VERSION "27.58"         // Version actuelle (Phase 2 + Reward/Risk Fix)
 
 // === MODULE INCLUDES ===
 #include "includes/Utils.mqh"
@@ -158,10 +158,10 @@ input bool     Trade_NZDUSD = false;        // NZD/USD
 // === PARAMÈTRES SCALPING ===
 input group "=== SCALPING SETTINGS ==="
 input bool     UseDynamicTPSL = true;          // Utiliser TP/SL dynamiques (basés ATR)
-input double   ATR_TP_Multiplier = 1.5;        // Multiplier ATR pour TP (si dynamique)
-input double   ATR_SL_Multiplier = 2.0;        // Multiplier ATR pour SL (si dynamique)
-input double   ScalpTP_Pips = 8.0;             // TP fixe en pips (si non dynamique)
-input double   ScalpSL_Pips = 15.0;            // SL fixe en pips (si non dynamique)
+input double   ATR_TP_Multiplier = 2.0;        // Multiplier ATR pour TP (si dynamique) - ✅ v27.58: 2.0 au lieu de 1.5
+input double   ATR_SL_Multiplier = 1.5;        // Multiplier ATR pour SL (si dynamique) - ✅ v27.58: 1.5 au lieu de 2.0 (réduit pertes)
+input double   ScalpTP_Pips = 12.0;            // TP fixe en pips (si non dynamique) - ✅ v27.58: 12 au lieu de 8
+input double   ScalpSL_Pips = 12.0;            // SL fixe en pips (si non dynamique) - ✅ v27.58: 12 au lieu de 15 (ratio 1:1)
 input double   TrailingStop_Pips = 5.0;
 input double   BreakEven_Pips = 5.0;
 input int      MaxSpread_Points = 20;
@@ -169,11 +169,11 @@ input int      MaxSpread_Points = 20;
 // === PARTIAL CLOSE ===
 input group "=== PARTIAL CLOSE SETTINGS ==="
 input bool     UsePartialClose = true;          // Activer fermeture partielle
-input double   PartialClosePercent = 35.0;      // % à fermer à TP1 (1-99) - ✅ v27.57: Optimisé 35% au lieu de 50%
-input double   TP1_Multiplier = 0.75;           // TP1 = ATR × multiplier (si dynamique) - ✅ v27.57: Optimisé 0.75 au lieu de 1.0
-input double   TP2_Multiplier = 3.5;            // TP2 = ATR × multiplier (si dynamique) - ✅ v27.57: Optimisé 3.5 au lieu de 2.5
-input double   TP1_Fixed_Pips = 5.0;            // TP1 fixe en pips (si non dynamique)
-input double   TP2_Fixed_Pips = 20.0;           // TP2 fixe en pips (si non dynamique) - ✅ v27.57: Optimisé 20 au lieu de 15
+input double   PartialClosePercent = 20.0;      // % à fermer à TP1 (1-99) - ✅ v27.58: 20% au lieu de 35% (garde 80%)
+input double   TP1_Multiplier = 1.5;            // TP1 = ATR × multiplier (si dynamique) - ✅ v27.58: 1.5 au lieu de 0.75 (DOUBLÉ)
+input double   TP2_Multiplier = 6.0;            // TP2 = ATR × multiplier (si dynamique) - ✅ v27.58: 6.0 au lieu de 3.5
+input double   TP1_Fixed_Pips = 8.0;            // TP1 fixe en pips (si non dynamique) - ✅ v27.58: 8 au lieu de 5
+input double   TP2_Fixed_Pips = 30.0;           // TP2 fixe en pips (si non dynamique) - ✅ v27.58: 30 au lieu de 20
 input bool     MoveSLToBreakEvenAfterTP1 = true; // Déplacer SL à BE après TP1
 
 // === GESTION DU RISQUE ===
@@ -979,10 +979,42 @@ void ManageAllPositions()
       }
 
       //=================================================================
-      // TRAILING STOP LOGIC
+      // ✅ v27.58 PHASE 2: TRAILING STOP ADAPTATIF ATR
       //=================================================================
       if(profit_pips >= TrailingStop_Pips) {
-         double trail_distance = TrailingStop_Pips * PIPS_TO_POINTS_MULTIPLIER * point;
+         // Calcul distance de trailing basée sur ATR du symbole
+         int symbol_idx = GetIndicatorIndex(symbol);
+         double trail_distance;
+
+         if(symbol_idx >= 0) {
+            UpdateIndicatorCache(symbol_idx);
+            double current_atr = indicators_cache[symbol_idx].atr[0];
+            double atr_pips = current_atr / point / PIPS_TO_POINTS_MULTIPLIER;
+
+            // Trailing distance = 50% de l'ATR (ajustable)
+            trail_distance = current_atr * 0.5;
+
+            // ✅ TRAILING AGRESSIF si profit > 2× ATR
+            // Réduit distance à 25% ATR pour serrer le SL et sécuriser
+            if(profit_pips > atr_pips * 2.0) {
+               trail_distance = current_atr * 0.25;
+               Log(LOG_DEBUG, symbol + " #" + IntegerToString(ticket) +
+                   " - Mode trailing AGRESSIF (profit " + DoubleToString(profit_pips, 1) +
+                   " > 2×ATR " + DoubleToString(atr_pips, 1) + ")");
+            }
+
+            // Minimum = TrailingStop_Pips configuré
+            double min_trail = TrailingStop_Pips * PIPS_TO_POINTS_MULTIPLIER * point;
+            trail_distance = MathMax(trail_distance, min_trail);
+
+            Log(LOG_DEBUG, symbol + " #" + IntegerToString(ticket) +
+                " - Trailing adaptatif: " + DoubleToString(trail_distance/point/PIPS_TO_POINTS_MULTIPLIER, 1) +
+                " pips (ATR: " + DoubleToString(atr_pips, 1) + ")");
+         } else {
+            // Fallback: distance fixe si ATR non disponible
+            trail_distance = TrailingStop_Pips * PIPS_TO_POINTS_MULTIPLIER * point;
+         }
+
          double new_trail_sl;
 
          if(type == POSITION_TYPE_BUY) {
