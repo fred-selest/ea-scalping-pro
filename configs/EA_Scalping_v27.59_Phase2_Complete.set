@@ -1,0 +1,154 @@
+; =============================================================================
+; EA Scalping Pro v27.59 - Configuration PHASE 2 COMPLETE
+; =============================================================================
+; Profil : Phase 2 Complete - H1 Filter + Trailing Adaptatif ATR
+; Capital recommandé : 2000$+ (risque 1%)
+; Risque par trade : 1.0%
+; Win rate attendu : 68-70% (filtre H1 élimine contre-tendance)
+; Profit/trade attendu : +35% vs v27.58 (meilleure qualité signaux)
+; Drawdown attendu : -15 à -25% vs v27.57
+; =============================================================================
+; ✅ NOUVEAUTÉS v27.59:
+;    - Filtre multi-timeframe H1 activé (évite contre-tendance)
+;    - Trailing Stop adaptatif ATR (mode agressif >2×ATR) - v27.58
+;    - Ratio TP/SL corrigé 1.33:1 (vs 0.50:1) - v27.58
+; =============================================================================
+
+; === TRADING SYMBOLS ===
+Trade_EURUSD=true||Major #1 - Meilleure liquidité
+Trade_GBPUSD=true||Major #2 - Volatilité intéressante
+Trade_USDJPY=true||Major #3 - Safe haven
+Trade_AUDUSD=false||Hors sessions principales
+Trade_USDCAD=false||Spread souvent élevé
+Trade_NZDUSD=false||Faible liquidité
+
+; === SCALPING SETTINGS (CORRECTED v27.58) ===
+UseDynamicTPSL=true||TP/SL adaptatifs basés ATR
+ATR_TP_Multiplier=2.0||2.0||1.0||3.0||✅ v27.58: 2.0 au lieu de 1.5 (+33%)
+ATR_SL_Multiplier=1.5||1.5||1.0||4.0||✅ v27.58: 1.5 au lieu de 2.0 (-25%)
+ScalpTP_Pips=12.0||12.0||1.0||20.0||✅ v27.58: 12 au lieu de 8 (+50%)
+ScalpSL_Pips=12.0||12.0||2.0||40.0||✅ v27.58: 12 au lieu de 15 (ratio 1:1)
+TrailingStop_Pips=5.0||5.0||0.5||15.0||Minimum pour trailing adaptatif ATR
+BreakEven_Pips=5.0||5.0||0.5||15.0
+MaxSpread_Points=20||20||5||30
+
+; === PARTIAL CLOSE (OPTIMIZED v27.58) ===
+UsePartialClose=true||Fermeture partielle activée
+PartialClosePercent=20.0||20.0||10.0||90.0||✅ v27.58: 20% au lieu de 35% (garde 80%)
+TP1_Multiplier=1.5||1.5||0.5||2.0||✅ v27.58: 1.5 au lieu de 0.75 (DOUBLÉ)
+TP2_Multiplier=6.0||6.0||1.5||10.0||✅ v27.58: 6.0 au lieu de 3.5 (+71%)
+TP1_Fixed_Pips=5.0||5.0||1.0||15.0
+TP2_Fixed_Pips=30.0||30.0||5.0||50.0||✅ v27.58: 30 au lieu de 20 (+50%)
+MoveSLToBreakEvenAfterTP1=true||SL → BE après TP1
+
+; === RISK MANAGEMENT ===
+RiskPercent=1.0||1.0||0.1||2.0||1% par trade (maintenu)
+MaxLotSize=1.0||1.0||0.01||5.0
+MaxDailyLoss=3.0||3.0||0.5||10.0
+MaxTradesPerDay=50||50||5||100
+MaxOpenPositions=5||5||1||10
+MaxPositionsPerSymbol=2||2||1||5
+
+; === CORRELATION & VOLATILITY ===
+UseCorrelationFilter=true||Évite double exposition
+MaxCorrelation=0.70||0.70||0.50||0.90
+UseVolatilityBasedSizing=true||Position sizing adaptatif ATR
+MaxVolatilityMultiplier=2.0||2.0||1.0||3.0
+
+; === NEWS FILTER ===
+UseNewsFilter=true||Évite trading pendant news
+MinutesBeforeNews=30||30||15||60
+MinutesAfterNews=15||15||5||30
+FilterHighImpact=true||Filtre news impact élevé
+FilterMediumImpact=true||Filtre news impact moyen
+FilterLowImpact=false||Trade pendant news faible impact
+NewsCurrencies=USD,EUR,GBP,JPY,AUD,CAD,NZD,CHF||Devises surveillées
+
+; === ONNX AI MODEL ===
+UseONNX=false||Désactivé par défaut (optionnel)
+MinConfidence=0.75||0.75||0.5||1.0
+ModelFileName=scalping_model.onnx
+
+; === DASHBOARD ===
+ShowDashboard=true||Afficher dashboard
+Dashboard_X=30||30||0||200
+Dashboard_Y=30||30||0||200
+Dashboard_Color=16777215||Blanc
+Dashboard_BG=128||Navy
+AutoShiftChart=false||Dashboard fixe à droite
+
+; === TRADING HOURS ===
+Trade_Asian=false||Faible volatilité
+Trade_London=true||Meilleure liquidité
+Trade_NewYork=true||Volumes importants
+
+; === TECHNICAL INDICATORS ===
+EMA_Fast=8||8||5||20
+EMA_Slow=21||21||10||50
+RSI_Period=9||9||5||20
+ATR_Period=14||14||10||30
+ATR_Filter=1.5||1.5||0.5||5.0
+ADX_Period=14||14||10||30
+ADX_Threshold=20.0||20.0||15.0||30.0
+UseH1Filter=true||true||✅ v27.59: Filtre tendance H1 (NOUVEAU!)
+
+; === AUTO-UPDATE ===
+EnableAutoUpdate=false||Désactivé (manuel recommandé)
+UpdateURL=https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_News_Dashboard_v27.mq5
+CheckUpdateEveryHours=24||24||1||168
+
+MagicNumber=270590||Magic number v27.59
+
+; =============================================================================
+; 📊 RÉSULTATS ATTENDUS (Phase 2 Complete v27.59):
+; =============================================================================
+; Comparaison vs v27.58 (sans filtre H1):
+;   - Trades exécutés: -25 à -35% (filtre contre-tendance)
+;   - Win Rate: +5-10% (de 63% → 68-70%)
+;   - Profit par trade: +35% (meilleure qualité)
+;   - Profit Factor: >2.5 (vs 2.26 attendu v27.58)
+;   - Max Drawdown: -15 à -25% (moins de whipsaws)
+;   - Faux signaux: -30 à -40%
+;
+; Comparaison vs v27.57 (baseline négatif):
+;   - Profit Factor: >2.5 (vs 0.86 🔴 négatif)
+;   - Ratio Win/Loss: >2:1 (vs 0.50:1 🔴)
+;   - Avg Win: >2.5 pips (vs 1.55 pips)
+;   - Avg Loss: <2.0 pips (vs 3.07 pips)
+;
+; 🧪 TEST OBLIGATOIRE:
+;   1. Backtest: 6 mois (même période que v27.57/v27.58)
+;   2. Comparer métriques avec v27.58 et v27.57
+;   3. Vérifier Profit Factor >2.5
+;   4. Vérifier Max Drawdown <15%
+;   5. Analyser logs pour voir signaux filtrés par H1
+;
+; 📈 MÉTRIQUES CRITIQUES À SUIVRE:
+;   - Win Rate (%) - Objectif: >68%
+;   - Profit Factor - Objectif: >2.5
+;   - Average Win/Loss ratio - Objectif: >2:1
+;   - Max Drawdown (%) - Objectif: <15%
+;   - Nombre trades - Attendu: -30% vs v27.58
+;
+; 🔍 ANALYSE LOGS:
+;   Surveiller messages:
+;   - "Signal BUY confirmé (avec filtre H1)"
+;   - "Signal BUY ignoré: H1 non haussier (évite contre-tendance)"
+;   - "Tendance H1: HAUSSIERE / BAISSIERE"
+;   - "Mode trailing AGRESSIF" (profit >2×ATR)
+;
+; ⚠️  SI BACKTEST NÉGATIF:
+;   Option 1: Désactiver H1 filter (UseH1Filter=false)
+;   Option 2: Tester avec timeframes différents (H4 au lieu de H1)
+;   Option 3: Ajuster seuils EMA H1 (actuellement 8/21)
+;
+; 🚀 PROCHAINE ÉTAPE (Phase 2.3):
+;   Si backtest v27.59 positif (PF >2.5):
+;   - Re-entry logic (pyramiding sur tendances fortes)
+;   - Gains additionnels: +10-20%
+;
+; 💡 NOTES IMPORTANTES:
+;   - Phase 2 complète à 66% (Trailing ATR ✅ + H1 Filter ✅)
+;   - Re-entry logic reste à implémenter (Phase 2.3)
+;   - Toujours tester en DEMO avant production!
+; =============================================================================
