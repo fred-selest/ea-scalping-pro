@@ -1,0 +1,110 @@
+; =============================================================================
+; EA Scalping Pro v27.58 - SANS FILTRE H1 (Test Correction TP/SL)
+; =============================================================================
+; Profil : Phase 2 - Trailing ATR + Fix TP/SL SANS filtre H1
+; Capital recommandé : 2000$+ (risque 1%)
+; Risque par trade : 1.0%
+; Test : Valider correction ratio TP/SL avant d'ajouter H1 filter
+; =============================================================================
+
+; === TRADING SYMBOLS ===
+Trade_EURUSD=true||Major #1
+Trade_GBPUSD=true||Major #2
+Trade_USDJPY=true||Major #3
+Trade_AUDUSD=false
+Trade_USDCAD=false
+Trade_NZDUSD=false
+
+; === SCALPING SETTINGS (CORRECTED v27.58) ===
+UseDynamicTPSL=true
+ATR_TP_Multiplier=2.0||2.0||1.0||3.0||✅ v27.58: 2.0 au lieu de 1.5
+ATR_SL_Multiplier=1.5||1.5||1.0||4.0||✅ v27.58: 1.5 au lieu de 2.0
+ScalpTP_Pips=12.0||12.0||1.0||20.0||✅ v27.58: 12 au lieu de 8
+ScalpSL_Pips=12.0||12.0||2.0||40.0||✅ v27.58: 12 au lieu de 15
+TrailingStop_Pips=5.0
+BreakEven_Pips=5.0
+MaxSpread_Points=20
+
+; === PARTIAL CLOSE (OPTIMIZED v27.58) ===
+UsePartialClose=true
+PartialClosePercent=20.0||20.0||10.0||90.0||✅ v27.58: 20% au lieu de 35%
+TP1_Multiplier=1.5||1.5||0.5||2.0||✅ v27.58: 1.5 au lieu de 0.75
+TP2_Multiplier=6.0||6.0||1.5||10.0||✅ v27.58: 6.0 au lieu de 3.5
+TP1_Fixed_Pips=5.0
+TP2_Fixed_Pips=30.0||30.0||5.0||50.0||✅ v27.58: 30 au lieu de 20
+MoveSLToBreakEvenAfterTP1=true
+
+; === RISK MANAGEMENT ===
+RiskPercent=1.0
+MaxLotSize=1.0
+MaxDailyLoss=3.0
+MaxTradesPerDay=50
+MaxOpenPositions=5
+MaxPositionsPerSymbol=2
+
+; === CORRELATION & VOLATILITY ===
+UseCorrelationFilter=true
+MaxCorrelation=0.70
+UseVolatilityBasedSizing=true
+MaxVolatilityMultiplier=2.0
+
+; === NEWS FILTER ===
+UseNewsFilter=true
+MinutesBeforeNews=30
+MinutesAfterNews=15
+FilterHighImpact=true
+FilterMediumImpact=true
+FilterLowImpact=false
+NewsCurrencies=USD,EUR,GBP,JPY,AUD,CAD,NZD,CHF
+
+; === ONNX AI MODEL ===
+UseONNX=false
+MinConfidence=0.75
+ModelFileName=scalping_model.onnx
+
+; === DASHBOARD ===
+ShowDashboard=true
+Dashboard_X=30
+Dashboard_Y=30
+Dashboard_Color=16777215
+Dashboard_BG=128
+AutoShiftChart=false
+
+; === TRADING HOURS ===
+Trade_Asian=false
+Trade_London=true
+Trade_NewYork=true
+
+; === TECHNICAL INDICATORS ===
+EMA_Fast=8
+EMA_Slow=21
+RSI_Period=9
+ATR_Period=14
+ATR_Filter=1.5
+ADX_Period=14
+ADX_Threshold=20.0
+UseH1Filter=false||⚠️ DÉSACTIVÉ pour tester correction TP/SL seule
+
+; === AUTO-UPDATE ===
+EnableAutoUpdate=false
+UpdateURL=https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_News_Dashboard_v27.mq5
+CheckUpdateEveryHours=24
+
+MagicNumber=270580||Magic number v27.58 (sans H1)
+
+; =============================================================================
+; 📊 OBJECTIF TEST:
+; =============================================================================
+; Valider que le fix TP/SL v27.58 améliore la rentabilité SANS le filtre H1
+;
+; Résultats attendus (vs v27.57):
+;   - Trades: ~600 (proche de 612)
+;   - Win Rate: 63-65% (stable)
+;   - Profit Factor: >2.0 (vs 0.86 v27.57) ✅
+;   - Avg Win: >2.5 pips (vs 1.55 v27.57)
+;   - Avg Loss: <2.0 pips (vs 3.07 v27.57)
+;   - Ratio: >1.5:1 (vs 0.50:1 v27.57)
+;
+; Si POSITIF → Le fix TP/SL fonctionne, on peut ensuite revoir le filtre H1
+; Si NÉGATIF → Il y a un problème avec le fix TP/SL lui-même
+; =============================================================================
