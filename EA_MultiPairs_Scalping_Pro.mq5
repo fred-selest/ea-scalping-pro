@@ -576,9 +576,9 @@ int GetSignalForSymbol(string symbol)
    }
 
    // ✅ v27.57: Filtre SPREAD - Éviter trades avec spread élevé
-   double current_spread = SymbolInfoInteger(symbol, SYMBOL_SPREAD);
+   long current_spread = SymbolInfoInteger(symbol, SYMBOL_SPREAD);
    if(current_spread > MaxSpread_Points) {
-      Log(LOG_DEBUG, symbol + " - Spread trop élevé (" + DoubleToString(current_spread, 0) +
+      Log(LOG_DEBUG, symbol + " - Spread trop élevé (" + IntegerToString((int)current_spread) +
           " pts > " + IntegerToString(MaxSpread_Points) + " pts)");
       return 0;
    }
