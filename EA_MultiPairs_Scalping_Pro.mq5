@@ -330,7 +330,7 @@ int OnInit()
       return(INIT_FAILED);
    }
 
-   if(!InitializeIndicators()) {
+   if(!InitializeIndicators(symbols, symbol_count)) {
       Log(LOG_ERROR, "Erreur d'initialisation des indicateurs");
       return(INIT_FAILED);
    }

@@ -8,49 +8,12 @@
 //|   - Filtre de corrélation entre paires                          |
 //|   - Limites journalières (pertes, trades)                       |
 //|   - Comptage de positions                                       |
+//|                                                                  |
+//| NOTE: Les structures et variables sont définies dans le main    |
 //+------------------------------------------------------------------+
 #property copyright "fred-selest"
 #property link      "https://github.com/fred-selest/ea-scalping-pro"
 #property strict
-
-#include "Utils.mqh"
-#include "Indicators.mqh"
-
-// === CONSTANTES RISK MANAGEMENT ===
-#define MIN_TP_PIPS_LIMIT 1.0           // Minimum realistic Take Profit in pips
-#define MIN_SL_PIPS_LIMIT 2.0           // Minimum realistic Stop Loss in pips
-
-// === STRUCTURES RISQUE ===
-
-// Structure pour les paires corrélées
-struct CorrelationPair {
-   string symbol1;
-   string symbol2;
-   double correlation;  // -1 à 1 (négatif = inverse, positif = direct)
-};
-
-// === VARIABLES GLOBALES (déclarées dans le fichier principal) ===
-extern CorrelationPair correlations[];
-extern int trades_today;
-extern double daily_profit;
-extern datetime current_day;
-extern datetime last_daily_check;
-
-// Paramètres de risque (définis dans le fichier principal)
-extern double RiskPercent;
-extern double MaxLotSize;
-extern double MaxDailyLoss;
-extern int MaxTradesPerDay;
-extern int MaxOpenPositions;
-extern int MaxPositionsPerSymbol;
-extern bool UseCorrelationFilter;
-extern double MaxCorrelation;
-extern bool UseVolatilityBasedSizing;
-extern double MaxVolatilityMultiplier;
-extern bool UseDynamicTPSL;
-extern double ATR_SL_Multiplier;
-extern double ScalpSL_Pips;
-extern int MagicNumber;
 
 //+------------------------------------------------------------------+
 //| ✅ v27.54: Support TP/SL dynamiques pour calcul risque           |
@@ -63,11 +26,9 @@ double CalculateLotSize(string symbol)
 
    // ✅ v27.56: Ajuster risque selon volatilité
    if(UseVolatilityBasedSizing) {
-      // Calculer ratio de volatilité (ATR actuel vs moyenne)
       double current_atr = 0;
       double average_atr = GetAverageATR(symbol, 20);
 
-      // Obtenir l'index du symbole
       int idx = GetIndicatorIndex(symbol);
 
       if(idx >= 0 && average_atr > 0) {
@@ -76,8 +37,6 @@ double CalculateLotSize(string symbol)
          double volatility_ratio = current_atr / average_atr;
 
          // Ajuster risque inversement à la volatilité
-         // Volatilité haute (ratio > 1) → risque réduit
-         // Volatilité basse (ratio < 1) → risque augmenté
          double adjusted_risk = RiskPercent / volatility_ratio;
 
          // Limiter l'ajustement selon MaxVolatilityMultiplier
@@ -102,7 +61,7 @@ double CalculateLotSize(string symbol)
    double max_lot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
    double lot_step = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
 
-   // ✅ v27.54: Calculer SL effectif (dynamique ou fixe)
+   // Calculer SL effectif (dynamique ou fixe)
    double effective_sl_pips = ScalpSL_Pips;
 
    if(UseDynamicTPSL) {
@@ -167,7 +126,7 @@ void CheckDailyReset()
 {
    datetime now = TimeCurrent();
 
-   // ✅ v27.4 FIX: Vérifier seulement toutes les 5 minutes
+   // Vérifier seulement toutes les 5 minutes
    if(now - last_daily_check < 300) return;
    last_daily_check = now;
 
@@ -195,28 +154,23 @@ void CheckDailyReset()
 }
 
 //+------------------------------------------------------------------+
-//| ✅ REFACTOR: Helper function to count positions (DRY principle) |
-//| Avoids code duplication between GetTotalPositions and GetSymbolPositions |
+//| Helper function to count positions                               |
 //+------------------------------------------------------------------+
 int CountPositions(string symbol_filter = "", int max_count = 0)
 {
    int count = 0;
    int total = PositionsTotal();
 
-   // If max_count not specified, use a very high number
    if(max_count == 0) max_count = 999999;
 
    for(int i = total - 1; i >= 0; i--) {
-      // Early exit optimization
       if(count >= max_count) break;
 
       ulong ticket = PositionGetTicket(i);
       if(!PositionSelectByTicket(ticket)) continue;
 
-      // Check magic number
       if(PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
 
-      // If symbol filter specified, check it
       if(symbol_filter != "" && PositionGetString(POSITION_SYMBOL) != symbol_filter) continue;
 
       count++;
@@ -226,8 +180,7 @@ int CountPositions(string symbol_filter = "", int max_count = 0)
 }
 
 //+------------------------------------------------------------------+
-//| ✅ v27.4 OPT: Compter positions totales avec sortie anticipée  |
-//| ✅ REFACTOR: Uses CountPositions helper (no duplication)       |
+//| Compter positions totales                                        |
 //+------------------------------------------------------------------+
 int GetTotalPositions()
 {
@@ -235,8 +188,7 @@ int GetTotalPositions()
 }
 
 //+------------------------------------------------------------------+
-//| ✅ v27.4 OPT: Compter positions symbole avec sortie anticipée  |
-//| ✅ REFACTOR: Uses CountPositions helper (no duplication)       |
+//| Compter positions par symbole                                    |
 //+------------------------------------------------------------------+
 int GetSymbolPositions(string symbol)
 {
@@ -244,17 +196,15 @@ int GetSymbolPositions(string symbol)
 }
 
 //+------------------------------------------------------------------+
-//| Vérifier si on peut trader (toutes les conditions)               |
+//| Vérifier si on peut trader                                       |
 //+------------------------------------------------------------------+
 bool CanTrade(string symbol)
 {
    // Vérifier spread
    long spread = SymbolInfoInteger(symbol, SYMBOL_SPREAD);
-   extern int MaxSpread_Points;
    if(spread > MaxSpread_Points) return false;
 
    // Vérifier session
-   extern bool Trade_Asian, Trade_London, Trade_NewYork;
    MqlDateTime time;
    TimeToStruct(TimeCurrent(), time);
    int hour = time.hour;
@@ -266,11 +216,10 @@ bool CanTrade(string symbol)
 
    if(!in_session) return false;
 
-   // Vérifier news (fonction externe dans NewsFilter.mqh)
-   extern bool IsNewsTime(string);
+   // Vérifier news
    if(IsNewsTime(symbol)) return false;
 
-   // ✅ v27.4: Vérifier reset journalier
+   // Vérifier reset journalier
    CheckDailyReset();
 
    // Vérifier limites journalières
@@ -283,41 +232,8 @@ bool CanTrade(string symbol)
    if(GetTotalPositions() >= MaxOpenPositions) return false;
    if(GetSymbolPositions(symbol) >= MaxPositionsPerSymbol) return false;
 
-   // ✅ v27.56: Vérifier corrélations
+   // Vérifier corrélations
    if(HasCorrelatedPosition(symbol)) return false;
 
    return true;
-}
-
-//+------------------------------------------------------------------+
-//| Mettre à jour les statistiques après un trade                    |
-//+------------------------------------------------------------------+
-void UpdateTradeStatistics(double profit)
-{
-   trades_today++;
-   daily_profit += profit;
-}
-
-//+------------------------------------------------------------------+
-//| Obtenir les statistiques de risque actuelles                     |
-//+------------------------------------------------------------------+
-string GetRiskStatistics()
-{
-   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
-   double daily_loss_pct = (daily_profit / balance) * 100.0;
-   double daily_limit_pct = -MaxDailyLoss;
-
-   string stats = StringFormat(
-      "Risk Stats:\n" +
-      "  Trades today: %d/%d\n" +
-      "  Daily P&L: %.2f (%.2f%%)\n" +
-      "  Daily limit: %.2f%%\n" +
-      "  Open positions: %d/%d",
-      trades_today, MaxTradesPerDay,
-      daily_profit, daily_loss_pct,
-      daily_limit_pct,
-      GetTotalPositions(), MaxOpenPositions
-   );
-
-   return stats;
 }

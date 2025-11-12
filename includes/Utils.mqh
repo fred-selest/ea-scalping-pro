@@ -16,7 +16,7 @@
 #define PIPS_TO_POINTS_MULTIPLIER 10    // Conversion pips to points (10 for 4/5 digit brokers)
 #define WEBQUEST_TIMEOUT_MS 5000        // WebRequest timeout in milliseconds
 #define HOURS_TO_SECONDS 3600           // Conversion hours to seconds
-#define SECONDS_PER_DAY 86400           // Seconds in a day for calculations
+// Note: SECONDS_PER_DAY est défini dans le fichier principal
 
 // Logging levels
 enum LOG_LEVEL {
@@ -27,10 +27,8 @@ enum LOG_LEVEL {
 };
 
 // === VARIABLES GLOBALES DE LOGGING ===
-// Ces variables doivent être déclarées dans le fichier principal
-extern LOG_LEVEL MinLogLevel;
-extern bool EnableFileLogging;
-extern int MagicNumber;
+// Ces variables (MinLogLevel, EnableFileLogging, MagicNumber) sont
+// déclarées dans le fichier principal et accessibles directement
 
 //+------------------------------------------------------------------+
 //| Fonction de logging avec niveaux de sévérité                    |

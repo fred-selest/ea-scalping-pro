@@ -7,46 +7,18 @@
 //|   - Parsing JSON du calendrier économique                       |
 //|   - Filtre de trading basé sur les news                        |
 //|   - Circuit breaker pour API failures                          |
+//|                                                                  |
+//| NOTE: La structure NewsEvent est définie dans le fichier principal |
 //+------------------------------------------------------------------+
 #property copyright "fred-selest"
 #property link      "https://github.com/fred-selest/ea-scalping-pro"
 #property strict
-
-#include "Utils.mqh"
 
 // === CONSTANTES NEWS ===
 #define MIN_NEWS_UPDATE_INTERVAL 300    // Minimum 5 minutes between news API calls
 #define NEWS_RELOAD_INTERVAL 21600      // Reload news every 6 hours
 #define NEWS_API_MAX_FAILURES 3         // Nombre max échecs avant circuit breaker
 #define NEWS_API_DISABLE_DURATION 3600  // Durée désactivation (1 heure)
-
-// === STRUCTURES NEWS ===
-
-// Structure pour un événement économique
-struct NewsEvent {
-   datetime time;
-   string title;
-   string country;
-   string impact;
-   string forecast;
-   string previous;
-};
-
-// === VARIABLES GLOBALES (déclarées dans le fichier principal) ===
-extern NewsEvent news_events[];
-extern datetime last_news_update;
-extern bool news_filter_active;
-extern int news_api_failures;
-extern datetime news_api_disabled_until;
-
-// Paramètres news (définis dans le fichier principal)
-extern bool UseNewsFilter;
-extern int MinutesBeforeNews;
-extern int MinutesAfterNews;
-extern bool FilterHighImpact;
-extern bool FilterMediumImpact;
-extern bool FilterLowImpact;
-extern string NewsCurrencies;
 
 //+------------------------------------------------------------------+
 //| ✅ v27.54: Charger calendrier avec circuit breaker              |
@@ -316,14 +288,4 @@ bool IsNewsTime(string symbol)
    }
 
    return false;
-}
-
-//+------------------------------------------------------------------+
-//| Réinitialiser le circuit breaker (admin function)                |
-//+------------------------------------------------------------------+
-void ResetNewsCircuitBreaker()
-{
-   news_api_failures = 0;
-   news_api_disabled_until = 0;
-   Log(LOG_INFO, "✅ Circuit breaker news réinitialisé");
 }
