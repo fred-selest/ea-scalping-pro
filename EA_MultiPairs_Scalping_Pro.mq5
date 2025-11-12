@@ -1,5 +1,5 @@
 //+------------------------------------------------------------------+
-//| EA Multi-Paires Scalping Pro v27.56 - Smart Risk Management     |
+//| EA Multi-Paires Scalping Pro v27.59 - Phase 2 Complete          |
 //| Expert Advisor pour trading scalping multi-paires               |
 //|------------------------------------------------------------------|
 //| DESCRIPTION:                                                     |
@@ -13,7 +13,8 @@
 //| FONCTIONNALITÉS PRINCIPALES:                                    |
 //|   ✓ Trading multi-symboles (EUR/USD, GBP/USD, USD/JPY, etc.)   |
 //|   ✓ Filtre news économiques (pause trading avant/après news)    |
-//|   ✓ Trailing Stop et Break-Even automatiques                    |
+//|   ✓ Trailing Stop adaptatif ATR (mode agressif profit >2×ATR)  |
+//|   ✓ Filtre multi-timeframe H1 (évite contre-tendance)          |
 //|   ✓ Limites journalières (pertes max, nombre trades)           |
 //|   ✓ Validation complète des paramètres d'entrée                |
 //|   ✓ Système de logging avancé avec niveaux de sévérité         |
@@ -22,12 +23,12 @@
 //|   ✓ Gestion corrélations (évite double exposition)             |
 //|   ✓ Position sizing adaptatif selon volatilité                 |
 //|                                                                  |
-//| NOUVEAUTÉS v27.56:                                              |
-//|   🎯 ADD: Filtre corrélations - Évite double exposition         |
-//|   🎯 ADD: Position sizing volatilité - Adapte lots à ATR       |
-//|   📊 ADD: Cache ATR history - Calcul moyenne 20 périodes       |
-//|   ⚡ OPT: Meilleur Sharpe Ratio (+20-30% estimé)               |
-//|   🛡️ SEC: Réduction drawdown (-15-25% estimé)                  |
+//| NOUVEAUTÉS v27.59 (PHASE 2):                                    |
+//|   🚀 ADD: Filtre multi-timeframe H1 - Évite contre-tendance    |
+//|   🎯 FIX: Ratio Reward/Risk 1.33:1 (vs 0.50:1) - v27.58        |
+//|   📈 OPT: Trailing Stop Adaptatif ATR - v27.58                 |
+//|   ⚡ EST: Win rate +5-10%, Profit/trade +35%                   |
+//|   🛡️ EST: Drawdown -15-25%, Faux signaux -30-40%               |
 //|                                                                  |
 //| NOUVEAUTÉS v27.54:                                              |
 //|   🎯 ADD: Filtre ADX - Force de tendance (évite range)         |
@@ -38,10 +39,10 @@
 //|                                                                  |
 //| AUTEUR: fred-selest                                             |
 //| GITHUB: https://github.com/fred-selest/ea-scalping-pro         |
-//| VERSION: 27.58 (Phase 2 + Fix Reward/Risk Ratio)                |
+//| VERSION: 27.59 (Phase 2 Complete: H1 Filter + Trailing ATR)     |
 //| DATE: 2025-11-12
 //+------------------------------------------------------------------+
-#property version   "27.580"
+#property version   "27.590"
 #property strict
 #property description "Multi-Symbol Scalping EA avec News Filter"
 #property description "Dashboard temps réel + ONNX + Correctifs Critiques v27.4"
