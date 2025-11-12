@@ -86,6 +86,9 @@ struct SymbolIndicators {
    int handle_rsi;
    int handle_atr;
    int handle_adx;
+   // ✅ v27.59 PHASE 2: Multi-timeframe H1 filter
+   int handle_h1_ema_fast;
+   int handle_h1_ema_slow;
    bool enabled;
    int positions_count;
    double last_profit;
@@ -98,6 +101,9 @@ struct CachedIndicators {
    double rsi[3];
    double atr[2];
    double adx[2];
+   // ✅ v27.59 PHASE 2: Cache H1 pour filtre multi-timeframe
+   double h1_ema_fast[2];
+   double h1_ema_slow[2];
    datetime last_update;
 };
 
@@ -136,7 +142,7 @@ struct ATRHistory {
 #define ORDER_RETRY_COUNT 3             // Nombre de tentatives pour ordres
 #define ORDER_RETRY_DELAY_MS 100        // Délai entre retries (ms)
 #define DASHBOARD_LINES 17              // Nombre de lignes dans le dashboard
-#define CURRENT_VERSION "27.58"         // Version actuelle (Phase 2 + Reward/Risk Fix)
+#define CURRENT_VERSION "27.59"         // Version actuelle (Phase 2: Multi-timeframe + Reward/Risk Fix)
 
 // === MODULE INCLUDES ===
 #include "includes/Utils.mqh"
@@ -229,6 +235,8 @@ input int      ATR_Period = 14;
 input double   ATR_Filter = 1.5;
 input int      ADX_Period = 14;                // Période ADX pour force de tendance
 input double   ADX_Threshold = 20.0;           // Seuil ADX minimum (< 20 = marché range)
+// ✅ v27.59 PHASE 2: Multi-timeframe filter
+input bool     UseH1Filter = true;             // Filtre tendance H1 (évite contre-tendance)
 
 // === AUTO-UPDATE ===
 input group "=== AUTO-UPDATE ==="
@@ -236,7 +244,7 @@ input bool     EnableAutoUpdate = false;    // Activer mises à jour auto
 input string   UpdateURL = "https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_News_Dashboard_v27.mq5";
 input int      CheckUpdateEveryHours = 24;  // Vérifier MAJ toutes les X heures
 
-input int      MagicNumber = 270560;  // Magic number v27.56
+input int      MagicNumber = 270590;  // Magic number v27.59 (Phase 2 complete)
 
 // === VARIABLES GLOBALES ===
 string symbols[];
@@ -574,6 +582,18 @@ int GetSignalForSymbol(string symbol)
       return 0;
    }
 
+   // ✅ v27.59 PHASE 2: Filtre MULTI-TIMEFRAME H1 - Éviter contre-tendance
+   if(UseH1Filter) {
+      bool h1_bullish = (indicators_cache[idx].h1_ema_fast[0] > indicators_cache[idx].h1_ema_slow[0]);
+      bool h1_bearish = (indicators_cache[idx].h1_ema_fast[0] < indicators_cache[idx].h1_ema_slow[0]);
+
+      // Log tendance H1 pour debug
+      string h1_trend = h1_bullish ? "HAUSSIERE" : (h1_bearish ? "BAISSIERE" : "NEUTRE");
+      Log(LOG_DEBUG, symbol + " - Tendance H1: " + h1_trend +
+          " (EMA8=" + DoubleToString(indicators_cache[idx].h1_ema_fast[0], 5) +
+          " vs EMA21=" + DoubleToString(indicators_cache[idx].h1_ema_slow[0], 5) + ")");
+   }
+
    // Filtre ATR
    if(indicators_cache[idx].atr[0] < ATR_Filter * PIPS_TO_POINTS_MULTIPLIER * point) return 0;
 
@@ -596,12 +616,36 @@ int GetSignalForSymbol(string symbol)
    bool price_above = (price > indicators_cache[idx].ema_fast[0] && indicators_cache[idx].ema_fast[0] > indicators_cache[idx].ema_slow[0]);
    bool price_below = (price < indicators_cache[idx].ema_fast[0] && indicators_cache[idx].ema_fast[0] < indicators_cache[idx].ema_slow[0]);
 
-   // ✅ v27.57: Logique AND stricte - Tous les critères doivent être remplis
-   // BUY: EMA cross up + RSI bullish + momentum positif + prix au-dessus EMAs
-   if(ema_cross_up && rsi_bullish && rsi_momentum_up && price_above) return 1;
+   // ✅ v27.59 PHASE 2: Calculer tendance H1 pour filtre multi-timeframe
+   bool h1_bullish = true;
+   bool h1_bearish = true;
+   if(UseH1Filter) {
+      h1_bullish = (indicators_cache[idx].h1_ema_fast[0] > indicators_cache[idx].h1_ema_slow[0]);
+      h1_bearish = (indicators_cache[idx].h1_ema_fast[0] < indicators_cache[idx].h1_ema_slow[0]);
+   }
 
-   // SELL: EMA cross down + RSI bearish + momentum négatif + prix en-dessous EMAs
-   if(ema_cross_down && rsi_bearish && rsi_momentum_down && price_below) return -1;
+   // ✅ v27.57 + v27.59: Logique AND stricte + Filtre H1
+   // BUY: EMA cross up + RSI bullish + momentum positif + prix au-dessus EMAs + H1 haussier
+   if(ema_cross_up && rsi_bullish && rsi_momentum_up && price_above && h1_bullish) {
+      Log(LOG_INFO, symbol + " - Signal BUY confirmé (avec filtre H1)");
+      return 1;
+   }
+
+   // SELL: EMA cross down + RSI bearish + momentum négatif + prix en-dessous EMAs + H1 baissier
+   if(ema_cross_down && rsi_bearish && rsi_momentum_down && price_below && h1_bearish) {
+      Log(LOG_INFO, symbol + " - Signal SELL confirmé (avec filtre H1)");
+      return -1;
+   }
+
+   // Si signal existe mais H1 non aligné, logger
+   if(UseH1Filter) {
+      if(ema_cross_up && rsi_bullish && rsi_momentum_up && price_above && !h1_bullish) {
+         Log(LOG_DEBUG, symbol + " - Signal BUY ignoré: H1 non haussier (évite contre-tendance)");
+      }
+      if(ema_cross_down && rsi_bearish && rsi_momentum_down && price_below && !h1_bearish) {
+         Log(LOG_DEBUG, symbol + " - Signal SELL ignoré: H1 non baissier (évite contre-tendance)");
+      }
+   }
 
    return 0;
 }

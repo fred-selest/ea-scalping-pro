@@ -2,6 +2,127 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
+## [27.59] - 2025-11-12 🚀 PHASE 2: FILTRE MULTI-TIMEFRAME H1
+
+### ✨ Nouvelle Fonctionnalité: Filtre Tendance H1
+
+**Implémentation complète du filtre multi-timeframe pour éviter les trades contre-tendance.**
+
+#### 🎯 Principe
+- **Timeframe trading**: M5/M15 (scalping rapide)
+- **Timeframe filtre**: H1 (tendance principale)
+- **Règle**: Ne trade QUE si le signal scalping est **aligné avec la tendance H1**
+
+#### 🔧 Modifications Techniques
+
+**1. Structures étendues (EA_MultiPairs_Scalping_Pro.mq5:82-108)**
+```mql5
+// SymbolIndicators: Ajout handles H1
+int handle_h1_ema_fast;   // EMA 8 sur H1
+int handle_h1_ema_slow;   // EMA 21 sur H1
+
+// CachedIndicators: Ajout cache H1
+double h1_ema_fast[2];
+double h1_ema_slow[2];
+```
+
+**2. Initialisation H1 (includes/Indicators.mqh:40-50)**
+- Création handles EMA H1 pour chaque symbole
+- Copie automatique des valeurs H1 dans le cache (1 seconde)
+- Libération propre des handles en OnDeinit()
+
+**3. Logique de Filtrage (EA_MultiPairs_Scalping_Pro.mq5:585-650)**
+```mql5
+// Détection tendance H1
+bool h1_bullish = (h1_ema_fast[0] > h1_ema_slow[0]);
+bool h1_bearish = (h1_ema_fast[0] < h1_ema_slow[0]);
+
+// BUY autorisé SI:
+// - Signal BUY scalping (EMA cross, RSI, momentum)
+// - ET H1 haussier (EMA8 > EMA21 sur H1)
+
+// SELL autorisé SI:
+// - Signal SELL scalping
+// - ET H1 baissier (EMA8 < EMA21 sur H1)
+```
+
+**4. Paramètre Activable/Désactivable**
+```mql5
+input bool UseH1Filter = true;  // Filtre tendance H1
+```
+
+#### 📊 Impact Attendu
+
+**Avantages:**
+- ✅ **-30 à -40% de faux signaux** (évite contre-tendance)
+- ✅ **Win rate amélioré**: +5-10% (trades alignés avec tendance principale)
+- ✅ **Meilleur ratio Risk/Reward**: Tendances H1 ont plus de marge
+- ✅ **Moins de whipsaws**: Évite les retournements brusques
+
+**Inconvénients potentiels:**
+- ⚠️ **-20 à -30% de trades** (signaux filtrés)
+- ⚠️ **Peut manquer retournements H1** (si changement rapide)
+
+**Résultat Net Attendu:**
+```
+Scénario: 100 signaux scalping générés
+
+SANS filtre H1 (v27.58):
+- Trades exécutés: 100
+- Win rate: 63%
+- Wins: 63 × 2.0 pips = 126 pips
+- Loss: 37 × 1.5 pips = 55.5 pips
+- Net: +70.5 pips ✅
+
+AVEC filtre H1 (v27.59):
+- Trades exécutés: 70 (-30% filtrés)
+- Win rate: 70% (+7% grâce au filtre)
+- Wins: 49 × 2.0 pips = 98 pips
+- Loss: 21 × 1.5 pips = 31.5 pips
+- Net: +66.5 pips ✅
+
+Profit par trade: 66.5/70 = 0.95 pips/trade (vs 0.70 avant)
++35% profit par trade executé!
+```
+
+#### 🧪 Test Recommandé
+
+**BACKTEST v27.59** sur même période que v27.58 (6 mois):
+- Comparer **nombre de trades** (attendu: -25 à -35%)
+- Comparer **win rate** (objectif: >68% vs 63% avant)
+- Comparer **profit net** (doit rester positif)
+- Comparer **max drawdown** (attendu: réduit de 15-25%)
+- Comparer **profit factor** (objectif: >2.5 vs 2.26 attendu v27.58)
+
+#### 💡 Utilisation
+
+**Activation (recommandé):**
+```
+UseH1Filter = true   // ✅ Activé par défaut
+```
+
+**Désactivation (si backtest négatif):**
+```
+UseH1Filter = false  // Revient au comportement v27.58
+```
+
+#### 🔄 Logs de Debug
+
+Le filtre H1 log les informations suivantes:
+```
+EURUSD - Tendance H1: HAUSSIERE (EMA8=1.09453 vs EMA21=1.09234)
+EURUSD - Signal BUY confirmé (avec filtre H1)
+
+GBPUSD - Tendance H1: BAISSIERE (EMA8=1.26234 vs EMA21=1.26567)
+GBPUSD - Signal BUY ignoré: H1 non haussier (évite contre-tendance)
+```
+
+### 📈 État Phase 2 (Complète à 66%)
+
+- ✅ **Trailing Stop Adaptatif ATR** (v27.58)
+- ✅ **Filtre Multi-Timeframe H1** (v27.59)
+- ⏳ **Re-entry Logic** (à venir Phase 2.3)
+
 ## [27.58] - 2025-11-12 🔧 PHASE 2 + FIX REWARD/RISK RATIO
 
 ### ⚠️ CORRECTIF CRITIQUE: Ratio Reward/Risk
