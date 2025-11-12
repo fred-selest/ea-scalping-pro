@@ -1,0 +1,13 @@
+# MQL5 files
+*.mq5 linguist-language=MQL5
+*.mqh linguist-language=MQL5
+
+# Documentation
+*.md linguist-documentation
+
+# Config files
+*.set linguist-generated
+
+# Export files
+*.zip export-ignore
+*.backup export-ignore
