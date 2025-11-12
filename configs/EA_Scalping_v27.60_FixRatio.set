@@ -1,0 +1,133 @@
+; =============================================================================
+; EA Scalping Pro v27.60 - FIX RATIO WIN/LOSS (Graduel)
+; =============================================================================
+; Profil : Fix SL - Réduction SL de 23% pour améliorer ratio
+; Baseline : v27.57 avec News Filter ACTIVÉ (612 trades, 63% WR)
+; Objectif : Profit Factor >1.2 (profitable)
+; =============================================================================
+; CHANGEMENT UNIQUE:
+;    ATR_SL_Multiplier: 2.0 → 1.55 (-23%)
+;    Tout le reste identique à v27.57
+; =============================================================================
+
+; === TRADING SYMBOLS ===
+Trade_EURUSD=true
+Trade_GBPUSD=true
+Trade_USDJPY=true
+Trade_AUDUSD=false
+Trade_USDCAD=false
+Trade_NZDUSD=false
+
+; === SCALPING SETTINGS ===
+UseDynamicTPSL=true
+ATR_TP_Multiplier=1.5||1.5||1.0||3.0||✅ INCHANGÉ (baseline v27.57)
+ATR_SL_Multiplier=1.55||1.55||1.0||4.0||✅ v27.60: 1.55 au lieu de 2.0 (-23%)
+ScalpTP_Pips=8.0||8.0||1.0||20.0
+ScalpSL_Pips=15.0||15.0||2.0||40.0
+TrailingStop_Pips=5.0
+BreakEven_Pips=5.0
+MaxSpread_Points=20
+
+; === PARTIAL CLOSE (v27.57) ===
+UsePartialClose=true
+PartialClosePercent=35.0||35.0||10.0||90.0
+TP1_Multiplier=0.75||0.75||0.5||2.0
+TP2_Multiplier=3.5||3.5||1.5||5.0
+TP1_Fixed_Pips=5.0
+TP2_Fixed_Pips=20.0
+MoveSLToBreakEvenAfterTP1=true
+
+; === RISK MANAGEMENT ===
+RiskPercent=1.0
+MaxLotSize=1.0
+MaxDailyLoss=3.0
+MaxTradesPerDay=50
+MaxOpenPositions=5
+MaxPositionsPerSymbol=2
+
+; === CORRELATION & VOLATILITY ===
+UseCorrelationFilter=true
+MaxCorrelation=0.70
+UseVolatilityBasedSizing=true
+MaxVolatilityMultiplier=2.0
+
+; === NEWS FILTER ===
+UseNewsFilter=true||✅ RÉACTIVÉ (aide réellement!)
+MinutesBeforeNews=30
+MinutesAfterNews=15
+FilterHighImpact=true
+FilterMediumImpact=true
+FilterLowImpact=false
+NewsCurrencies=USD,EUR,GBP,JPY,AUD,CAD,NZD,CHF
+
+; === ONNX AI MODEL ===
+UseONNX=false
+MinConfidence=0.75
+ModelFileName=scalping_model.onnx
+
+; === DASHBOARD ===
+ShowDashboard=true
+Dashboard_X=30
+Dashboard_Y=30
+Dashboard_Color=16777215
+Dashboard_BG=128
+AutoShiftChart=false
+
+; === TRADING HOURS ===
+Trade_Asian=false
+Trade_London=true
+Trade_NewYork=true
+
+; === TECHNICAL INDICATORS ===
+EMA_Fast=8
+EMA_Slow=21
+RSI_Period=9
+ATR_Period=14
+ATR_Filter=1.5
+ADX_Period=14
+ADX_Threshold=20.0
+UseH1Filter=false||Pas encore implémenté correctement
+
+; === AUTO-UPDATE ===
+EnableAutoUpdate=false
+UpdateURL=https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_News_Dashboard_v27.mq5
+CheckUpdateEveryHours=24
+
+MagicNumber=270600||Magic number v27.60
+
+; =============================================================================
+; 📊 CALCUL THÉORIQUE v27.60:
+; =============================================================================
+; Baseline v27.57 (avec news filter):
+;   - Trades: 612
+;   - Win Rate: 63%
+;   - Avg Win: 1.55 pips
+;   - Avg Loss: -3.07 pips (trop large!)
+;   - Ratio: 0.50:1 🔴
+;   - Profit Factor: 0.86
+;
+; Avec SL réduit -23% (2.0× → 1.55× ATR):
+;   - Avg Loss attendu: -2.36 pips (vs -3.07)
+;   - Ratio: 1.55 / 2.36 = 0.66:1 (+32%) ✅
+;   - Gains: 63% × 1.55 = 97.65 pips
+;   - Pertes: 37% × 2.36 = 87.32 pips
+;   - Net: +10.33 pips ✅ (vs -16 pips avant)
+;   - Profit Factor: 97.65 / 87.32 = 1.12 ✅ (profitable!)
+;
+; Note: Win rate peut légèrement baisser (60-62%) car SL plus serré
+; Mais ratio amélioré compense largement
+;
+; 🧪 TEST OBLIGATOIRE:
+;   1. Période: 1 mai 2025 → 31 octobre 2025 (6 mois)
+;   2. Plateforme: Demo FxPro
+;   3. Comparer avec v27.57 baseline (612 trades, 63% WR)
+;   4. Objectifs:
+;      - Trades: 550-650 (proche baseline)
+;      - Win Rate: 60-63% (peut baisser légèrement)
+;      - Avg Loss: 2.2-2.5 pips (objectif: <2.5)
+;      - Ratio: >0.65:1 (objectif: >0.70:1)
+;      - Profit Factor: >1.1 (CRITIQUE: doit être >1.0!)
+;
+; ⚠️  SI WIN RATE CHUTE TROP (<58%):
+;   Option fallback: SL = 1.7× ATR (réduction -15% au lieu de -23%)
+; =============================================================================
