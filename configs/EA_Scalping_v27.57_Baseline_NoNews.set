@@ -1,0 +1,118 @@
+; =============================================================================
+; EA Scalping Pro v27.57 - BACKTEST BASELINE (Sans News Filter)
+; =============================================================================
+; Profil : v27.57 Original - Baseline de référence
+; Test : Confirmer les métriques v27.57 SANS interférence API news
+; Capital recommandé : 2000$+
+; Risque par trade : 1.0%
+; =============================================================================
+; ⚠️  CONFIGURATION DE RÉFÉRENCE:
+;    - Paramètres v27.57 originaux (TP/SL baseline)
+;    - UseNewsFilter = FALSE (éviter erreurs API en backtest)
+;    - UseH1Filter = FALSE (pas implémenté en v27.57)
+;    - Pas de trailing adaptatif ATR
+; =============================================================================
+
+; === TRADING SYMBOLS ===
+Trade_EURUSD=true
+Trade_GBPUSD=true
+Trade_USDJPY=true
+Trade_AUDUSD=false
+Trade_USDCAD=false
+Trade_NZDUSD=false
+
+; === SCALPING SETTINGS (v27.57 ORIGINAL) ===
+UseDynamicTPSL=true
+ATR_TP_Multiplier=1.5||1.5||1.0||3.0
+ATR_SL_Multiplier=2.0||2.0||1.5||4.0
+ScalpTP_Pips=8.0||8.0||1.0||20.0
+ScalpSL_Pips=15.0||15.0||2.0||40.0
+TrailingStop_Pips=5.0
+BreakEven_Pips=5.0
+MaxSpread_Points=20
+
+; === PARTIAL CLOSE (v27.57) ===
+UsePartialClose=true
+PartialClosePercent=35.0||35.0||10.0||90.0
+TP1_Multiplier=0.75||0.75||0.5||2.0
+TP2_Multiplier=3.5||3.5||1.5||5.0
+TP1_Fixed_Pips=5.0
+TP2_Fixed_Pips=20.0||20.0||5.0||40.0
+MoveSLToBreakEvenAfterTP1=true
+
+; === RISK MANAGEMENT ===
+RiskPercent=1.0
+MaxLotSize=1.0
+MaxDailyLoss=3.0
+MaxTradesPerDay=50
+MaxOpenPositions=5
+MaxPositionsPerSymbol=2
+
+; === CORRELATION & VOLATILITY ===
+UseCorrelationFilter=true
+MaxCorrelation=0.70
+UseVolatilityBasedSizing=true
+MaxVolatilityMultiplier=2.0
+
+; === NEWS FILTER ===
+UseNewsFilter=false||⚠️ DÉSACTIVÉ pour backtest (éviter erreur 4014)
+MinutesBeforeNews=30
+MinutesAfterNews=15
+FilterHighImpact=true
+FilterMediumImpact=true
+FilterLowImpact=false
+NewsCurrencies=USD,EUR,GBP,JPY,AUD,CAD,NZD,CHF
+
+; === ONNX AI MODEL ===
+UseONNX=false
+MinConfidence=0.75
+ModelFileName=scalping_model.onnx
+
+; === DASHBOARD ===
+ShowDashboard=true
+Dashboard_X=30
+Dashboard_Y=30
+Dashboard_Color=16777215
+Dashboard_BG=128
+AutoShiftChart=false
+
+; === TRADING HOURS ===
+Trade_Asian=false
+Trade_London=true
+Trade_NewYork=true
+
+; === TECHNICAL INDICATORS ===
+EMA_Fast=8
+EMA_Slow=21
+RSI_Period=9
+ATR_Period=14
+ATR_Filter=1.5
+ADX_Period=14
+ADX_Threshold=20.0
+UseH1Filter=false||N'existe pas en v27.57
+
+; === AUTO-UPDATE ===
+EnableAutoUpdate=false
+UpdateURL=https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_News_Dashboard_v27.mq5
+CheckUpdateEveryHours=24
+
+MagicNumber=270570||Magic number v27.57
+
+; =============================================================================
+; 📊 OBJECTIF:
+; =============================================================================
+; Établir une BASELINE FIABLE pour v27.57 sans interférence de l'erreur API
+;
+; Résultats attendus (basés sur tes premiers tests):
+;   - Trades: ~600-650 (sans blocage API)
+;   - Win Rate: 60-65%
+;   - Profit Factor: 0.8-1.0 (légèrement négatif ou neutre)
+;   - Avg Win: ~1.5-2.0 pips
+;   - Avg Loss: ~3.0 pips
+;   - Ratio: 0.50-0.60:1 (mauvais - c'est le problème à corriger!)
+;
+; Une fois cette baseline confirmée, on pourra:
+; 1. Identifier LE VRAI problème (ratio Win/Loss)
+; 2. Faire des ajustements GRADUELS et mesurés
+; 3. Tester chaque changement individuellement
+; =============================================================================
