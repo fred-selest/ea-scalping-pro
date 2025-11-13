@@ -11,6 +11,7 @@
 ;    - News Filter: ACTIVÉ (aide à filtrer mauvais moments)
 ;    - SANS filtre H1 (trop strict, retiré)
 ;    - SANS trailing adaptatif ATR (instable, retiré)
+;    - TIMEFRAME: M5 (IMPORTANT: backtest sur M5, pas M15!)
 ; =============================================================================
 
 ; === TRADING SYMBOLS ===
@@ -100,35 +101,36 @@ MagicNumber=270600||Magic number v27.60 (Stable Production)
 ; =============================================================================
 ; 📊 CALCUL THÉORIQUE v27.60:
 ; =============================================================================
-; Baseline v27.57 (avec news filter):
-;   - Trades: 612
-;   - Win Rate: 63%
-;   - Avg Win: 1.55 pips
-;   - Avg Loss: -3.07 pips
-;   - Ratio: 0.50:1 🔴
-;   - Profit Factor: 0.86 (négatif)
+; Baseline v27.57 M5 (avec news filter - CONFIRMÉ):
+;   - Trades: 652
+;   - Win Rate: 62.12%
+;   - Avg Win: 1.76 pips
+;   - Avg Loss: -3.31 pips
+;   - Ratio: 0.53:1 🔴
+;   - Profit Factor: 0.87 (négatif)
 ;
 ; Avec SL réduit -15% (2.0× → 1.7× ATR):
-;   - Avg Loss attendu: -2.60 pips (vs -3.07)
-;   - Ratio: 1.55 / 2.60 = 0.60:1 (+20% vs 0.50:1) ✅
-;   - Gains: 63% × 1.55 = 97.65 pips
-;   - Pertes: 37% × 2.60 = 96.20 pips
-;   - Net: +1.45 pips ✅ (vs -16 pips avant)
-;   - Profit Factor: 97.65 / 96.20 = 1.01 ✅ (profitable!)
+;   - Avg Loss attendu: -2.81 pips (vs -3.31)
+;   - Ratio: 1.76 / 2.81 = 0.63:1 (+19% vs 0.53:1) ✅
+;   - Gains: 62.12% × 1.76 = 109.33 pips
+;   - Pertes: 37.88% × 2.81 = 106.44 pips
+;   - Net: +2.89 pips ✅ (vs -16 pips avant)
+;   - Profit Factor: 1.03 ✅ (profitable!)
 ;
-; Si Win rate baisse légèrement (61% car SL serré):
-;   - Gains: 61% × 1.55 = 94.55 pips
-;   - Pertes: 39% × 2.60 = 101.40 pips
-;   - Net: -6.85 pips (quasi neutre)
-;   - Profit Factor: 0.93 (presque profitable)
+; Si Win rate baisse légèrement (60% car SL serré):
+;   - Gains: 60% × 1.76 = 105.60 pips
+;   - Pertes: 40% × 2.81 = 112.40 pips
+;   - Net: -6.80 pips (quasi neutre)
+;   - Profit Factor: 0.94 (presque profitable)
 ;
 ; Scénario conservateur: SL réduit aide sans trop affecter WR
 ;
 ; 🧪 TEST OBLIGATOIRE:
 ;   1. Période: 1 mai 2025 → 31 octobre 2025 (6 mois)
 ;   2. Plateforme: Demo FxPro
-;   3. Recompiler avec code v27.60 (SANS trailing adaptatif ATR!)
-;   4. Objectifs:
+;   3. TIMEFRAME: M5 (IMPORTANT!)
+;   4. Recompiler avec code v27.60 (SANS trailing adaptatif ATR!)
+;   5. Objectifs:
 ;      - Trades: 550-650 (proche baseline 612)
 ;      - Win Rate: 60-63% (acceptable si >60%)
 ;      - Avg Loss: 2.4-2.8 pips (objectif: <2.8)
@@ -146,7 +148,13 @@ MagicNumber=270600||Magic number v27.60 (Stable Production)
 ; 💡 UTILISATION:
 ;   1. Recompiler EA_MultiPairs_Scalping_Pro.mq5
 ;   2. Charger cette config dans Strategy Tester
-;   3. Backtest 6 mois puis comparer avec v27.57 baseline
-;   4. Si positif → Déployer en demo live
-;   5. Si neutre/négatif → Ajustements supplémentaires
+;   3. TIMEFRAME M5 (CRITIQUE!)
+;   4. Backtest 6 mois puis comparer avec v27.57 baseline (652 trades)
+;   5. Si positif → Déployer en demo live
+;   6. Si neutre/négatif → Ajustements supplémentaires (ATR_SL = 1.6)
+;
+; ⚠️  NOTE IMPORTANTE:
+;   - Baseline confirmée sur M5: 652 trades, 62.12% WR, PF 0.87
+;   - M15 génère 3× moins de trades (~216 vs 652)
+;   - TOUJOURS tester sur M5 pour comparer avec baseline!
 ; =============================================================================
