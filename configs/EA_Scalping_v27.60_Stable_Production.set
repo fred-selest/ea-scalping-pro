@@ -1,0 +1,152 @@
+; =============================================================================
+; EA Scalping Pro v27.60 - VERSION STABLE PRODUCTION
+; =============================================================================
+; Profil : Stable Production Ready - Fix ratio Win/Loss conservateur
+; Baseline : v27.57 (612 trades, 63% WR, PF 0.86)
+; Objectif : Profit Factor >1.1 (rentable)
+; =============================================================================
+; CHANGEMENTS vs v27.57:
+;    - ATR_SL_Multiplier: 2.0 → 1.7 (-15% conservateur)
+;    - Trailing: Simple et stable (distance fixe, pas adaptatif)
+;    - News Filter: ACTIVÉ (aide à filtrer mauvais moments)
+;    - SANS filtre H1 (trop strict, retiré)
+;    - SANS trailing adaptatif ATR (instable, retiré)
+; =============================================================================
+
+; === TRADING SYMBOLS ===
+Trade_EURUSD=true||Major #1 - Meilleure liquidité
+Trade_GBPUSD=true||Major #2 - Volatilité intéressante
+Trade_USDJPY=true||Major #3 - Safe haven
+Trade_AUDUSD=false||Hors sessions principales
+Trade_USDCAD=false||Spread souvent élevé
+Trade_NZDUSD=false||Faible liquidité
+
+; === SCALPING SETTINGS (v27.60 STABLE) ===
+UseDynamicTPSL=true||TP/SL adaptatifs basés ATR
+ATR_TP_Multiplier=1.5||1.5||1.0||3.0||✅ INCHANGÉ (baseline v27.57)
+ATR_SL_Multiplier=1.7||1.7||1.0||4.0||✅ v27.60: 1.7 au lieu de 2.0 (-15%)
+ScalpTP_Pips=8.0||8.0||1.0||20.0
+ScalpSL_Pips=15.0||15.0||2.0||40.0
+TrailingStop_Pips=5.0||5.0||0.5||15.0||Distance fixe (stable)
+BreakEven_Pips=5.0||5.0||0.5||15.0
+MaxSpread_Points=20||20||5||30
+
+; === PARTIAL CLOSE (v27.57 BASELINE) ===
+UsePartialClose=true||Fermeture partielle activée
+PartialClosePercent=35.0||35.0||10.0||90.0
+TP1_Multiplier=0.75||0.75||0.5||2.0
+TP2_Multiplier=3.5||3.5||1.5||5.0
+TP1_Fixed_Pips=5.0||5.0||1.0||15.0
+TP2_Fixed_Pips=20.0||20.0||5.0||40.0
+MoveSLToBreakEvenAfterTP1=true||SL → BE après TP1
+
+; === RISK MANAGEMENT ===
+RiskPercent=1.0||1.0||0.1||2.0||1% par trade
+MaxLotSize=1.0||1.0||0.01||5.0
+MaxDailyLoss=3.0||3.0||0.5||10.0
+MaxTradesPerDay=50||50||5||100
+MaxOpenPositions=5||5||1||10
+MaxPositionsPerSymbol=2||2||1||5
+
+; === CORRELATION & VOLATILITY ===
+UseCorrelationFilter=true||Évite double exposition
+MaxCorrelation=0.70||0.70||0.50||0.90
+UseVolatilityBasedSizing=true||Position sizing adaptatif ATR
+MaxVolatilityMultiplier=2.0||2.0||1.0||3.0
+
+; === NEWS FILTER ===
+UseNewsFilter=true||✅ ACTIVÉ (aide à filtrer mauvais moments!)
+MinutesBeforeNews=30||30||15||60
+MinutesAfterNews=15||15||5||30
+FilterHighImpact=true||Filtre news impact élevé
+FilterMediumImpact=true||Filtre news impact moyen
+FilterLowImpact=false||Trade pendant news faible impact
+NewsCurrencies=USD,EUR,GBP,JPY,AUD,CAD,NZD,CHF||Devises surveillées
+
+; === ONNX AI MODEL ===
+UseONNX=false||Désactivé par défaut (optionnel)
+MinConfidence=0.75||0.75||0.5||1.0
+ModelFileName=scalping_model.onnx
+
+; === DASHBOARD ===
+ShowDashboard=true||Afficher dashboard
+Dashboard_X=30||30||0||200
+Dashboard_Y=30||30||0||200
+Dashboard_Color=16777215||Blanc
+Dashboard_BG=128||Navy
+AutoShiftChart=false||Dashboard fixe à droite
+
+; === TRADING HOURS ===
+Trade_Asian=false||Faible volatilité
+Trade_London=true||Meilleure liquidité
+Trade_NewYork=true||Volumes importants
+
+; === TECHNICAL INDICATORS ===
+EMA_Fast=8||8||5||20
+EMA_Slow=21||21||10||50
+RSI_Period=9||9||5||20
+ATR_Period=14||14||10||30
+ATR_Filter=1.5||1.5||0.5||5.0
+ADX_Period=14||14||10||30
+ADX_Threshold=20.0||20.0||15.0||30.0
+
+; === AUTO-UPDATE ===
+EnableAutoUpdate=false||Désactivé (manuel recommandé)
+UpdateURL=https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_News_Dashboard_v27.mq5
+CheckUpdateEveryHours=24||24||1||168
+
+MagicNumber=270600||Magic number v27.60 (Stable Production)
+
+; =============================================================================
+; 📊 CALCUL THÉORIQUE v27.60:
+; =============================================================================
+; Baseline v27.57 (avec news filter):
+;   - Trades: 612
+;   - Win Rate: 63%
+;   - Avg Win: 1.55 pips
+;   - Avg Loss: -3.07 pips
+;   - Ratio: 0.50:1 🔴
+;   - Profit Factor: 0.86 (négatif)
+;
+; Avec SL réduit -15% (2.0× → 1.7× ATR):
+;   - Avg Loss attendu: -2.60 pips (vs -3.07)
+;   - Ratio: 1.55 / 2.60 = 0.60:1 (+20% vs 0.50:1) ✅
+;   - Gains: 63% × 1.55 = 97.65 pips
+;   - Pertes: 37% × 2.60 = 96.20 pips
+;   - Net: +1.45 pips ✅ (vs -16 pips avant)
+;   - Profit Factor: 97.65 / 96.20 = 1.01 ✅ (profitable!)
+;
+; Si Win rate baisse légèrement (61% car SL serré):
+;   - Gains: 61% × 1.55 = 94.55 pips
+;   - Pertes: 39% × 2.60 = 101.40 pips
+;   - Net: -6.85 pips (quasi neutre)
+;   - Profit Factor: 0.93 (presque profitable)
+;
+; Scénario conservateur: SL réduit aide sans trop affecter WR
+;
+; 🧪 TEST OBLIGATOIRE:
+;   1. Période: 1 mai 2025 → 31 octobre 2025 (6 mois)
+;   2. Plateforme: Demo FxPro
+;   3. Recompiler avec code v27.60 (SANS trailing adaptatif ATR!)
+;   4. Objectifs:
+;      - Trades: 550-650 (proche baseline 612)
+;      - Win Rate: 60-63% (acceptable si >60%)
+;      - Avg Loss: 2.4-2.8 pips (objectif: <2.8)
+;      - Ratio: >0.58:1 (objectif: >0.60:1)
+;      - Profit Factor: >1.0 (CRITIQUE: doit être profitable!)
+;
+; ⚠️  VERSION STABLE:
+;   - Code propre basé sur v27.57 (meilleure config)
+;   - Trailing simple et stable (distance fixe)
+;   - News filter activé (aide filtrage)
+;   - Pas de filtre H1 (trop strict, retiré)
+;   - Pas de trailing adaptatif ATR (instable, retiré)
+;   - Changement UNIQUE: SL réduit -15% (conservateur)
+;
+; 💡 UTILISATION:
+;   1. Recompiler EA_MultiPairs_Scalping_Pro.mq5
+;   2. Charger cette config dans Strategy Tester
+;   3. Backtest 6 mois puis comparer avec v27.57 baseline
+;   4. Si positif → Déployer en demo live
+;   5. Si neutre/négatif → Ajustements supplémentaires
+; =============================================================================
