@@ -96,38 +96,47 @@ CheckUpdateEveryHours=24
 MagicNumber=270600||Magic number v27.60
 
 ; =============================================================================
-; 📊 CALCUL THÉORIQUE v27.60:
+; 📊 CALCUL THÉORIQUE v27.60 (OPTION AGRESSIVE):
 ; =============================================================================
-; Baseline v27.57 (avec news filter):
-;   - Trades: 612
-;   - Win Rate: 63%
-;   - Avg Win: 1.55 pips
-;   - Avg Loss: -3.07 pips (trop large!)
-;   - Ratio: 0.50:1 🔴
-;   - Profit Factor: 0.86
+; Baseline v27.57 M5 (avec news filter - CONFIRMÉ):
+;   - Trades: 652
+;   - Win Rate: 62.12%
+;   - Avg Win: 1.76 pips
+;   - Avg Loss: -3.31 pips (trop large!)
+;   - Ratio: 0.53:1 🔴
+;   - Profit Factor: 0.87 (négatif)
 ;
-; Avec SL réduit -23% (2.0× → 1.55× ATR):
-;   - Avg Loss attendu: -2.36 pips (vs -3.07)
-;   - Ratio: 1.55 / 2.36 = 0.66:1 (+32%) ✅
-;   - Gains: 63% × 1.55 = 97.65 pips
-;   - Pertes: 37% × 2.36 = 87.32 pips
-;   - Net: +10.33 pips ✅ (vs -16 pips avant)
-;   - Profit Factor: 97.65 / 87.32 = 1.12 ✅ (profitable!)
+; Avec SL réduit -23% (2.0× → 1.55× ATR) - OPTION AGRESSIVE:
+;   - Avg Loss attendu: -2.55 pips (vs -3.31)
+;   - Ratio: 1.76 / 2.55 = 0.69:1 (+30% vs 0.53:1) ✅
+;   - Gains: 62.12% × 1.76 = 109.33 pips
+;   - Pertes: 37.88% × 2.55 = 96.59 pips
+;   - Net: +12.74 pips ✅ (vs -16 pips avant)
+;   - Profit Factor: 109.33 / 96.59 = 1.13 ✅ (profitable!)
 ;
-; Note: Win rate peut légèrement baisser (60-62%) car SL plus serré
-; Mais ratio amélioré compense largement
+; Si Win rate baisse légèrement (60% car SL très serré):
+;   - Gains: 60% × 1.76 = 105.60 pips
+;   - Pertes: 40% × 2.55 = 102.00 pips
+;   - Net: +3.60 pips (toujours positif)
+;   - Profit Factor: 1.04 ✅
+;
+; Note: SL -23% est AGRESSIF, risque baisse WR
+; Pour approche CONSERVATIVE, utiliser Stable_Production.set (SL -15%)
 ;
 ; 🧪 TEST OBLIGATOIRE:
 ;   1. Période: 1 mai 2025 → 31 octobre 2025 (6 mois)
 ;   2. Plateforme: Demo FxPro
-;   3. Comparer avec v27.57 baseline (612 trades, 63% WR)
-;   4. Objectifs:
-;      - Trades: 550-650 (proche baseline)
-;      - Win Rate: 60-63% (peut baisser légèrement)
-;      - Avg Loss: 2.2-2.5 pips (objectif: <2.5)
-;      - Ratio: >0.65:1 (objectif: >0.70:1)
-;      - Profit Factor: >1.1 (CRITIQUE: doit être >1.0!)
+;   3. TIMEFRAME: M5 (IMPORTANT!)
+;   4. Comparer avec baseline M5 (652 trades, 62.12% WR)
+;   5. Objectifs:
+;      - Trades: 550-650 (proche baseline 652)
+;      - Win Rate: 58-62% (peut baisser car SL serré)
+;      - Avg Loss: 2.3-2.6 pips (objectif: <2.6)
+;      - Ratio: >0.65:1 (objectif: >0.68:1)
+;      - Profit Factor: >1.05 (CRITIQUE: doit être profitable!)
 ;
-; ⚠️  SI WIN RATE CHUTE TROP (<58%):
-;   Option fallback: SL = 1.7× ATR (réduction -15% au lieu de -23%)
+; ⚠️  RECOMMANDATION:
+;   Tester d'abord Stable_Production.set (SL -15%, conservateur)
+;   Si résultats positifs mais limités, essayer FixRatio.set (SL -23%)
+;   Si Win Rate chute <58%, utiliser SL = 1.7× ATR (Stable version)
 ; =============================================================================
