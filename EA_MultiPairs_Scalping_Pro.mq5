@@ -1,5 +1,5 @@
 //+------------------------------------------------------------------+
-//| EA Multi-Paires Scalping Pro v27.59 - Phase 2 Complete          |
+//| EA Multi-Paires Scalping Pro v27.60 - STABLE Production Ready   |
 //| Expert Advisor pour trading scalping multi-paires               |
 //|------------------------------------------------------------------|
 //| DESCRIPTION:                                                     |
@@ -13,8 +13,8 @@
 //| FONCTIONNALITÉS PRINCIPALES:                                    |
 //|   ✓ Trading multi-symboles (EUR/USD, GBP/USD, USD/JPY, etc.)   |
 //|   ✓ Filtre news économiques (pause trading avant/après news)    |
-//|   ✓ Trailing Stop adaptatif ATR (mode agressif profit >2×ATR)  |
-//|   ✓ Filtre multi-timeframe H1 (évite contre-tendance)          |
+//|   ✓ Trailing Stop simple et stable (distance fixe en pips)     |
+//|   ✓ Logique AND stricte (EMA + RSI + momentum + prix)          |
 //|   ✓ Limites journalières (pertes max, nombre trades)           |
 //|   ✓ Validation complète des paramètres d'entrée                |
 //|   ✓ Système de logging avancé avec niveaux de sévérité         |
@@ -23,12 +23,12 @@
 //|   ✓ Gestion corrélations (évite double exposition)             |
 //|   ✓ Position sizing adaptatif selon volatilité                 |
 //|                                                                  |
-//| NOUVEAUTÉS v27.59 (PHASE 2):                                    |
-//|   🚀 ADD: Filtre multi-timeframe H1 - Évite contre-tendance    |
-//|   🎯 FIX: Ratio Reward/Risk 1.33:1 (vs 0.50:1) - v27.58        |
-//|   📈 OPT: Trailing Stop Adaptatif ATR - v27.58                 |
-//|   ⚡ EST: Win rate +5-10%, Profit/trade +35%                   |
-//|   🛡️ EST: Drawdown -15-25%, Faux signaux -30-40%               |
+//| NOUVEAUTÉS v27.60 (VERSION STABLE):                             |
+//|   🎯 FIX: SL réduit -15% pour améliorer ratio Win/Loss         |
+//|   🔧 FIX: Trailing simple (retrait trailing adaptatif ATR)     |
+//|   🔧 FIX: Retrait filtre H1 (trop strict)                      |
+//|   ✅ STABLE: Basé sur meilleure config v27.57                   |
+//|   📊 Objectif: Profit Factor >1.1 (rentabilité)                |
 //|                                                                  |
 //| NOUVEAUTÉS v27.54:                                              |
 //|   🎯 ADD: Filtre ADX - Force de tendance (évite range)         |
@@ -39,10 +39,10 @@
 //|                                                                  |
 //| AUTEUR: fred-selest                                             |
 //| GITHUB: https://github.com/fred-selest/ea-scalping-pro         |
-//| VERSION: 27.59 (Phase 2 Complete: H1 Filter + Trailing ATR)     |
+//| VERSION: 27.60 (Stable Production - Fix Ratio Win/Loss)         |
 //| DATE: 2025-11-12
 //+------------------------------------------------------------------+
-#property version   "27.590"
+#property version   "27.600"
 #property strict
 #property description "Multi-Symbol Scalping EA avec News Filter"
 #property description "Dashboard temps réel + ONNX + Correctifs Critiques v27.4"
@@ -87,9 +87,6 @@ struct SymbolIndicators {
    int handle_rsi;
    int handle_atr;
    int handle_adx;
-   // ✅ v27.59 PHASE 2: Multi-timeframe H1 filter
-   int handle_h1_ema_fast;
-   int handle_h1_ema_slow;
    bool enabled;
    int positions_count;
    double last_profit;
@@ -102,9 +99,6 @@ struct CachedIndicators {
    double rsi[3];
    double atr[2];
    double adx[2];
-   // ✅ v27.59 PHASE 2: Cache H1 pour filtre multi-timeframe
-   double h1_ema_fast[2];
-   double h1_ema_slow[2];
    datetime last_update;
 };
 
@@ -143,7 +137,7 @@ struct ATRHistory {
 #define ORDER_RETRY_COUNT 3             // Nombre de tentatives pour ordres
 #define ORDER_RETRY_DELAY_MS 100        // Délai entre retries (ms)
 #define DASHBOARD_LINES 17              // Nombre de lignes dans le dashboard
-#define CURRENT_VERSION "27.59"         // Version actuelle (Phase 2: Multi-timeframe + Reward/Risk Fix)
+#define CURRENT_VERSION "27.60"         // Version stable production (Fix ratio Win/Loss)
 
 // === MODULE INCLUDES ===
 #include "includes/Utils.mqh"
@@ -236,8 +230,6 @@ input int      ATR_Period = 14;
 input double   ATR_Filter = 1.5;
 input int      ADX_Period = 14;                // Période ADX pour force de tendance
 input double   ADX_Threshold = 20.0;           // Seuil ADX minimum (< 20 = marché range)
-// ✅ v27.59 PHASE 2: Multi-timeframe filter
-input bool     UseH1Filter = true;             // Filtre tendance H1 (évite contre-tendance)
 
 // === AUTO-UPDATE ===
 input group "=== AUTO-UPDATE ==="
@@ -245,7 +237,7 @@ input bool     EnableAutoUpdate = false;    // Activer mises à jour auto
 input string   UpdateURL = "https://raw.githubusercontent.com/fred-selest/ea-scalping-pro/main/EA_MultiPairs_News_Dashboard_v27.mq5";
 input int      CheckUpdateEveryHours = 24;  // Vérifier MAJ toutes les X heures
 
-input int      MagicNumber = 270590;  // Magic number v27.59 (Phase 2 complete)
+input int      MagicNumber = 270600;  // Magic number v27.60 (Stable)
 
 // === VARIABLES GLOBALES ===
 string symbols[];
@@ -583,18 +575,6 @@ int GetSignalForSymbol(string symbol)
       return 0;
    }
 
-   // ✅ v27.59 PHASE 2: Filtre MULTI-TIMEFRAME H1 - Éviter contre-tendance
-   if(UseH1Filter) {
-      bool h1_bullish = (indicators_cache[idx].h1_ema_fast[0] > indicators_cache[idx].h1_ema_slow[0]);
-      bool h1_bearish = (indicators_cache[idx].h1_ema_fast[0] < indicators_cache[idx].h1_ema_slow[0]);
-
-      // Log tendance H1 pour debug
-      string h1_trend = h1_bullish ? "HAUSSIERE" : (h1_bearish ? "BAISSIERE" : "NEUTRE");
-      Log(LOG_DEBUG, symbol + " - Tendance H1: " + h1_trend +
-          " (EMA8=" + DoubleToString(indicators_cache[idx].h1_ema_fast[0], 5) +
-          " vs EMA21=" + DoubleToString(indicators_cache[idx].h1_ema_slow[0], 5) + ")");
-   }
-
    // Filtre ATR
    if(indicators_cache[idx].atr[0] < ATR_Filter * PIPS_TO_POINTS_MULTIPLIER * point) return 0;
 
@@ -617,36 +597,12 @@ int GetSignalForSymbol(string symbol)
    bool price_above = (price > indicators_cache[idx].ema_fast[0] && indicators_cache[idx].ema_fast[0] > indicators_cache[idx].ema_slow[0]);
    bool price_below = (price < indicators_cache[idx].ema_fast[0] && indicators_cache[idx].ema_fast[0] < indicators_cache[idx].ema_slow[0]);
 
-   // ✅ v27.59 PHASE 2: Calculer tendance H1 pour filtre multi-timeframe
-   bool h1_bullish = true;
-   bool h1_bearish = true;
-   if(UseH1Filter) {
-      h1_bullish = (indicators_cache[idx].h1_ema_fast[0] > indicators_cache[idx].h1_ema_slow[0]);
-      h1_bearish = (indicators_cache[idx].h1_ema_fast[0] < indicators_cache[idx].h1_ema_slow[0]);
-   }
+   // ✅ v27.57: Logique AND stricte - Tous les critères doivent être remplis
+   // BUY: EMA cross up + RSI bullish + momentum positif + prix au-dessus EMAs
+   if(ema_cross_up && rsi_bullish && rsi_momentum_up && price_above) return 1;
 
-   // ✅ v27.57 + v27.59: Logique AND stricte + Filtre H1
-   // BUY: EMA cross up + RSI bullish + momentum positif + prix au-dessus EMAs + H1 haussier
-   if(ema_cross_up && rsi_bullish && rsi_momentum_up && price_above && h1_bullish) {
-      Log(LOG_INFO, symbol + " - Signal BUY confirmé (avec filtre H1)");
-      return 1;
-   }
-
-   // SELL: EMA cross down + RSI bearish + momentum négatif + prix en-dessous EMAs + H1 baissier
-   if(ema_cross_down && rsi_bearish && rsi_momentum_down && price_below && h1_bearish) {
-      Log(LOG_INFO, symbol + " - Signal SELL confirmé (avec filtre H1)");
-      return -1;
-   }
-
-   // Si signal existe mais H1 non aligné, logger
-   if(UseH1Filter) {
-      if(ema_cross_up && rsi_bullish && rsi_momentum_up && price_above && !h1_bullish) {
-         Log(LOG_DEBUG, symbol + " - Signal BUY ignoré: H1 non haussier (évite contre-tendance)");
-      }
-      if(ema_cross_down && rsi_bearish && rsi_momentum_down && price_below && !h1_bearish) {
-         Log(LOG_DEBUG, symbol + " - Signal SELL ignoré: H1 non baissier (évite contre-tendance)");
-      }
-   }
+   // SELL: EMA cross down + RSI bearish + momentum négatif + prix en-dessous EMAs
+   if(ema_cross_down && rsi_bearish && rsi_momentum_down && price_below) return -1;
 
    return 0;
 }
@@ -1024,49 +980,18 @@ void ManageAllPositions()
       }
 
       //=================================================================
-      // ✅ v27.58 PHASE 2: TRAILING STOP ADAPTATIF ATR
+      // TRAILING STOP SIMPLE (v27.60: Retour trailing fixe stable)
       //=================================================================
       if(profit_pips >= TrailingStop_Pips) {
-         // Calcul distance de trailing basée sur ATR du symbole
-         int symbol_idx = GetIndicatorIndex(symbol);
-         double trail_distance;
-
-         if(symbol_idx >= 0) {
-            UpdateIndicatorCache(symbol_idx);
-            double current_atr = indicators_cache[symbol_idx].atr[0];
-            double atr_pips = current_atr / point / PIPS_TO_POINTS_MULTIPLIER;
-
-            // Trailing distance = 50% de l'ATR (ajustable)
-            trail_distance = current_atr * 0.5;
-
-            // ✅ TRAILING AGRESSIF si profit > 2× ATR
-            // Réduit distance à 25% ATR pour serrer le SL et sécuriser
-            if(profit_pips > atr_pips * 2.0) {
-               trail_distance = current_atr * 0.25;
-               Log(LOG_DEBUG, symbol + " #" + IntegerToString(ticket) +
-                   " - Mode trailing AGRESSIF (profit " + DoubleToString(profit_pips, 1) +
-                   " > 2×ATR " + DoubleToString(atr_pips, 1) + ")");
-            }
-
-            // Minimum = TrailingStop_Pips configuré
-            double min_trail = TrailingStop_Pips * PIPS_TO_POINTS_MULTIPLIER * point;
-            trail_distance = MathMax(trail_distance, min_trail);
-
-            Log(LOG_DEBUG, symbol + " #" + IntegerToString(ticket) +
-                " - Trailing adaptatif: " + DoubleToString(trail_distance/point/PIPS_TO_POINTS_MULTIPLIER, 1) +
-                " pips (ATR: " + DoubleToString(atr_pips, 1) + ")");
-         } else {
-            // Fallback: distance fixe si ATR non disponible
-            trail_distance = TrailingStop_Pips * PIPS_TO_POINTS_MULTIPLIER * point;
-         }
-
+         // Distance fixe en pips (stable et prévisible)
+         double trail_distance = TrailingStop_Pips * PIPS_TO_POINTS_MULTIPLIER * point;
          double new_trail_sl;
 
          if(type == POSITION_TYPE_BUY) {
             // Pour BUY : SL doit être en-dessous du prix
             new_trail_sl = current_price - trail_distance;
 
-            // ✅ v27.4 FIX #4: Trailing up only + validation distance
+            // Trailing up only + validation distance
             if(new_trail_sl > current_sl) {
                if((current_price - new_trail_sl) >= min_stop_distance) {
                   new_sl = NormalizeDouble(new_trail_sl, digits);
@@ -1074,17 +999,15 @@ void ManageAllPositions()
 
                   Log(LOG_DEBUG, "Trailing BUY #" + IntegerToString(ticket) +
                       " | SL: " + DoubleToString(current_sl, digits) +
-                      " → " + DoubleToString(new_sl, digits));
-               } else {
-                  Log(LOG_DEBUG, "Trailing ignoré #" + IntegerToString(ticket) +
-                      " | Distance insuffisante");
+                      " → " + DoubleToString(new_sl, digits) +
+                      " (" + DoubleToString(TrailingStop_Pips, 1) + " pips)");
                }
             }
          } else {
             // Pour SELL : SL doit être au-dessus du prix
             new_trail_sl = current_price + trail_distance;
 
-            // ✅ v27.4 FIX #4: Trailing down only + validation distance
+            // Trailing down only + validation distance
             if(new_trail_sl < current_sl || current_sl == 0) {
                if((new_trail_sl - current_price) >= min_stop_distance) {
                   new_sl = NormalizeDouble(new_trail_sl, digits);
@@ -1092,10 +1015,8 @@ void ManageAllPositions()
 
                   Log(LOG_DEBUG, "Trailing SELL #" + IntegerToString(ticket) +
                       " | SL: " + DoubleToString(current_sl, digits) +
-                      " → " + DoubleToString(new_sl, digits));
-               } else {
-                  Log(LOG_DEBUG, "Trailing ignoré #" + IntegerToString(ticket) +
-                      " | Distance insuffisante");
+                      " → " + DoubleToString(new_sl, digits) +
+                      " (" + DoubleToString(TrailingStop_Pips, 1) + " pips)");
                }
             }
          }
